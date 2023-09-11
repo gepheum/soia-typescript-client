@@ -1,0 +1,28 @@
+{
+  "name": "soia",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/soia.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "mocha"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gepheum/soia-typescript.git"
+  },
+  "author": "Osi Daro <gepheum@gmail.com>",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/gepheum/soia-typescript/issues"
+  },
+  "homepage": "https://github.com/gepheum/soia-typescript#readme",
+  "devDependencies": {
+    "@types/mocha": "^10.0.1",
+    "@types/node": "^20.6.0",
+    "earl": "^1.1.0",
+    "mocha": "^10.2.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.2.2"
+  }
+}
