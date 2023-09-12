@@ -150,10 +150,12 @@ export class ByteString {
         // Don't copy the ArrayBuffer.
         const newByteOffset = input.byteOffset + start;
         const newByteLength = end - start;
-        return new ByteString(input.byteBuffer, newByteOffset, newByteLength);
+        return new ByteString(input.arrayBuffer, newByteOffset, newByteLength);
       }
-    } else {
+    } else if (input instanceof ArrayBuffer) {
       return new ByteString(input.slice(start, end));
+    } else {
+      throw new TypeError();
     }
   }
 
@@ -202,7 +204,7 @@ export class ByteString {
 
   /** Copies the contents of this byte string into a new array buffer. */
   toBuffer(): ArrayBuffer {
-    return this.byteBuffer.slice(
+    return this.arrayBuffer.slice(
       this.byteOffset,
       this.byteOffset + this.byteLength,
     );
@@ -216,7 +218,7 @@ export class ByteString {
   toBase64(): string {
     // See https://developer.mozilla.org/en-US/docs/Glossary/Base64
     const binaryString = Array.from(
-      new Uint8Array(this.byteBuffer),
+      this.uint8Array,
       (x) => String.fromCodePoint(x),
     ).join("");
     return btoa(binaryString);
@@ -229,22 +231,25 @@ export class ByteString {
       .join("");
   }
 
+  at(index: number): number | undefined {
+    return this.uint8Array.at(index);
+  }
+
   toString(): string {
     return `ByteString(${this.byteLength})`;
   }
 
   private constructor(
-    private readonly byteBuffer: ArrayBuffer,
+    private readonly arrayBuffer: ArrayBuffer,
     private readonly byteOffset = 0,
     /** The length of this byte string. */
-    readonly byteLength = byteBuffer.byteLength,
+    readonly byteLength = arrayBuffer.byteLength,
   ) {
+    this.uint8Array = new Uint8Array(arrayBuffer, byteOffset, byteLength);
     Object.freeze(this);
   }
 
-  private get uint8Array() {
-    return new Uint8Array(this.byteBuffer, this.byteOffset, this.byteLength);
-  }
+  private readonly uint8Array: Uint8Array;
 }
 
 /** A read-only JSON value. */
