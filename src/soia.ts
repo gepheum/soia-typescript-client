@@ -1390,6 +1390,9 @@ class ArraySerializerImpl<Item> //
   }
 
   fromJson(json: Json): ReadonlyArray<Item> {
+    if (json === 0) {
+      return _EMPTY_ARRAY;
+    }
     return freezeArray((json as readonly Json[]).map(
       (e) => this.itemSerializer.fromJson(e),
     ));
@@ -1462,7 +1465,7 @@ class NullableSerializerImpl<Other> //
 
   decode(stream: InputStream): Other | null {
     const wire = stream.dataView.getUint8(stream.offset);
-    if (wire === 0 || wire === 255) {
+    if (wire === 255) {
       ++stream.offset;
       return null;
     }
