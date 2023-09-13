@@ -1,7 +1,7 @@
 {
   "name": "soia",
   "type": "module",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "",
   "main": "dist/soia.js",
   "types": "dist/soia.d.ts",
