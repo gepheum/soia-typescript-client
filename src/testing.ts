@@ -1,6 +1,6 @@
 import { expect } from "earl";
 import { describe, it } from "mocha";
-import { Json, JsonFlavor, Serializer } from "./soia";
+import type { Json, JsonFlavor, Serializer } from "./soia.ts";
 
 export class SerializerTester<T> {
   constructor(readonly serializer: Serializer<T>) {}
