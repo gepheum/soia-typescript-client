@@ -1,76 +1,74 @@
-import { expect } from "earl";
+import { expect } from "buckwheat";
 import * as soia from "./soia";
 import { SerializerTester } from "./testing";
 import { describe, it } from "mocha";
 
 describe("Timestamp", () => {
   it("#MIN is min timestamp rerpresentable as Date objects", () => {
-    expect(new Date(soia.Timestamp.MIN.unixMillis).getTime()).toEqual(
+    expect(new Date(soia.Timestamp.MIN.unixMillis).getTime()).toBe(
       -8640000000000000,
     );
-    expect(new Date(soia.Timestamp.MIN.unixMillis - 1).getTime()).toEqual(
+    expect(new Date(soia.Timestamp.MIN.unixMillis - 1).getTime()).toBe(
       Number.NaN,
     );
   });
 
   it("#MAX is max timestamp rerpresentable as Date objects", () => {
-    expect(new Date(soia.Timestamp.MAX.unixMillis).getTime()).toEqual(
+    expect(new Date(soia.Timestamp.MAX.unixMillis).getTime()).toBe(
       8640000000000000,
     );
-    expect(new Date(soia.Timestamp.MAX.unixMillis + 1).getTime()).toEqual(
+    expect(new Date(soia.Timestamp.MAX.unixMillis + 1).getTime()).toBe(
       Number.NaN,
     );
   });
 
   describe("#fromUnixMillis()", () => {
     it("works", () => {
-      expect(soia.Timestamp.fromUnixMillis(3000).unixMillis).toEqual(3000);
-      expect(soia.Timestamp.fromUnixMillis(3001).unixSeconds).toEqual(3.001);
+      expect(soia.Timestamp.fromUnixMillis(3000).unixMillis).toBe(3000);
+      expect(soia.Timestamp.fromUnixMillis(3001).unixSeconds).toBe(3.001);
     });
     it("clamp timestamps outside of valid range", () => {
       expect(
         soia.Timestamp.fromUnixMillis(soia.Timestamp.MAX.unixMillis + 1)
           .unixMillis,
-      ).toEqual(
+      ).toBe(
         soia.Timestamp.MAX.unixMillis,
       );
     });
     it("truncates to millisecond precision", () => {
-      expect(soia.Timestamp.fromUnixMillis(2.8).unixMillis).toEqual(3);
+      expect(soia.Timestamp.fromUnixMillis(2.8).unixMillis).toBe(3);
     });
   });
 
   describe("#fromUnixSeconds()", () => {
     it("works", () => {
-      expect(soia.Timestamp.fromUnixSeconds(3).unixMillis).toEqual(3000);
-      expect(soia.Timestamp.fromUnixSeconds(3).unixSeconds).toEqual(3);
+      expect(soia.Timestamp.fromUnixSeconds(3).unixMillis).toBe(3000);
+      expect(soia.Timestamp.fromUnixSeconds(3).unixSeconds).toBe(3);
     });
     it("truncates to millisecond precision", () => {
-      expect(soia.Timestamp.fromUnixSeconds(2.0061).unixSeconds).toEqual(2.006);
+      expect(soia.Timestamp.fromUnixSeconds(2.0061).unixSeconds).toBe(2.006);
     });
   });
 
   describe("#toDate()", () => {
     it("works", () => {
       expect(soia.Timestamp.fromUnixMillis(1694467279837).toDate().getTime())
-        .toEqual(1694467279837);
+        .toBe(1694467279837);
     });
   });
 
   describe("#now()", () => {
     it("works", () => {
       const now = soia.Timestamp.now();
-      expect(now.toDate().getFullYear()).toBeGreaterThan(2022);
-      expect(now.toDate().getFullYear()).toBeLessThan(
-        new Date().getFullYear() + 2,
-      );
+      expect(now.toDate().getFullYear()).toCompare(">=", 2023);
+      expect(now.toDate().getFullYear()).toCompare("<=", new Date().getFullYear() + 1);
     });
   });
 
   describe("#toString()", () => {
     it("works", () => {
       const timestamp = soia.Timestamp.fromUnixMillis(1694467279837);
-      expect(timestamp.toString()).toEqual("2023-09-11T21:21:19.837Z");
+      expect(timestamp.toString()).toBe("2023-09-11T21:21:19.837Z");
     });
   });
 
@@ -78,7 +76,7 @@ describe("Timestamp", () => {
     it("works", () => {
       const timestamp = soia.Timestamp.fromUnixMillis(1694467279837);
       const parseResult = soia.Timestamp.parse(timestamp.toString());
-      expect(parseResult.unixMillis).toEqual(timestamp.unixMillis);
+      expect(parseResult.unixMillis).toBe(timestamp.unixMillis);
     });
   });
 });
@@ -88,7 +86,7 @@ describe("timestamp serializer", () => {
   const tester = new SerializerTester(serializer);
 
   it("#typeDescriptor", () => {
-    expect(serializer.typeDescriptor).toHaveSubset({
+    expect(serializer.typeDescriptor).toMatch({
       kind: "primitive",
       primitive: "tsmillis",
       serializer: serializer,
@@ -126,7 +124,7 @@ describe("timestamp serializer", () => {
   );
 
   it("default JSON flavor is dense", () => {
-    expect(serializer.toJson(soia.Timestamp.UNIX_EPOCH)).toEqual(0);
+    expect(serializer.toJson(soia.Timestamp.UNIX_EPOCH)).toBe(0);
   });
 });
 
@@ -156,8 +154,8 @@ describe("ByteString", () => {
 
   describe("#EMPTY", () => {
     it("works", () => {
-      expect(soia.ByteString.EMPTY.byteLength).toEqual(0);
-      expect(soia.ByteString.EMPTY.toBuffer().byteLength).toEqual(0);
+      expect(soia.ByteString.EMPTY.byteLength).toBe(0);
+      expect(soia.ByteString.EMPTY.toBuffer().byteLength).toBe(0);
     });
   });
 
@@ -165,70 +163,64 @@ describe("ByteString", () => {
     it("works when no start/end is specified", () => {
       let byteString = makeTestByteString();
       byteString = soia.ByteString.sliceOf(byteString);
-      expect(byteString.byteLength).toEqual(4);
-      expect(toArray(byteString)).toEqual([0, 1, 2, 3]);
+      expect(byteString.byteLength).toBe(4);
+      expect(toArray(byteString)).toMatch([0, 1, 2, 3]);
     });
 
     it("works when only start is specified", () => {
       let byteString = makeTestByteString();
       byteString = soia.ByteString.sliceOf(byteString, 1);
-      expect(byteString.byteLength).toEqual(3);
-      expect(toArray(byteString)).toEqual([1, 2, 3]);
+      expect(byteString.byteLength).toBe(3);
+      expect(toArray(byteString)).toMatch([1, 2, 3]);
     });
 
     it("works when both start/end are specified", () => {
       let byteString = makeTestByteString();
       byteString = soia.ByteString.sliceOf(byteString, 1, 3);
-      expect(byteString.byteLength).toEqual(2);
-      expect(toArray(byteString)).toEqual([1, 2]);
+      expect(byteString.byteLength).toBe(2);
+      expect(toArray(byteString)).toMatch([1, 2]);
     });
 
     it("copies ArrayBuffer slice", () => {
       const byteString = makeTestByteString();
-      expect(byteString.byteLength).toEqual(4);
-      expect(toArray(byteString)).toEqual([0, 1, 2, 3]);
+      expect(byteString.byteLength).toBe(4);
+      expect(toArray(byteString)).toMatch([0, 1, 2, 3]);
     });
 
     it("returns empty when start === end", () => {
       const byteString = makeTestByteString();
-      expect(soia.ByteString.sliceOf(byteString, 3, 3)).toExactlyEqual(
+      expect(soia.ByteString.sliceOf(byteString, 3, 3)).toBe(
         soia.ByteString.EMPTY,
       );
     });
 
     it("returns empty when start > end", () => {
       const byteString = makeTestByteString();
-      expect(soia.ByteString.sliceOf(byteString, 3, 0)).toExactlyEqual(
+      expect(soia.ByteString.sliceOf(byteString, 3, 0)).toBe(
         soia.ByteString.EMPTY,
       );
     });
 
     it("doesn't copy ByteString if it doesn't need to", () => {
       const byteString = makeTestByteString();
-      expect(soia.ByteString.sliceOf(byteString, 0, 4)).toExactlyEqual(
-        byteString,
-      );
+      expect(soia.ByteString.sliceOf(byteString, 0, 4)).toBe(byteString);
     });
 
     it("start can be < 0", () => {
       const byteString = makeTestByteString();
-      expect(soia.ByteString.sliceOf(byteString, -1, 4)).toExactlyEqual(
-        byteString,
-      );
+      expect(soia.ByteString.sliceOf(byteString, -1, 4)).toBe(byteString);
     });
 
     it("end can be > byteLength", () => {
       const byteString = makeTestByteString();
-      expect(soia.ByteString.sliceOf(byteString, 0, 5)).toExactlyEqual(
-        byteString,
-      );
+      expect(soia.ByteString.sliceOf(byteString, 0, 5)).toBe(byteString);
     });
 
     it("copies bytes in the ArrayBuffer", () => {
       const array = makeTestByteArray();
       const byteString = soia.ByteString.sliceOf(array.buffer);
       array[3] = 4;
-      expect(toArray(byteString)).toEqual([0, 1, 2, 3]);
+      expect(toArray(byteString)).toMatch([0, 1, 2, 3]);
     });
   });
 
@@ -239,15 +231,15 @@ describe("ByteString", () => {
     describe(description, () => {
       describe("#byteLength", () => {
         it("works", () => {
-          expect(byteString.byteLength).toEqual(20);
+          expect(byteString.byteLength).toBe(20);
         });
       });
 
       describe("#toBuffer", () => {
         it("works", () => {
           const buffer = byteString.toBuffer();
-          expect(buffer.byteLength).toEqual(20);
-          expect(new Uint8Array(buffer).at(2)).toEqual(2);
+          expect(buffer.byteLength).toBe(20);
+          expect(new Uint8Array(buffer).at(2)).toBe(2);
         });
       });
 
@@ -256,28 +248,28 @@ describe("ByteString", () => {
           const buffer = new ArrayBuffer(22);
           byteString.copyTo(buffer, 1);
           const array = new Uint8Array(buffer);
-          expect(array[5]).toEqual(4);
+          expect(array[5]).toBe(4);
         });
       });
 
       describe("#at()", () => {
         it("works with normal index", () => {
-          expect(byteString.at(2)).toEqual(2);
+          expect(byteString.at(2)).toBe(2);
         });
 
         it("works with negative index", () => {
-          expect(byteString.at(-1)).toEqual(19);
+          expect(byteString.at(-1)).toBe(19);
         });
       });
 
       describe("base64", () => {
         const base64 = byteString.toBase64();
         it("#toBase64() works", () => {
-          expect(base64).toEqual("AAECAwQFBgcICQoLDA0ODxAREhM=");
+          expect(base64).toBe("AAECAwQFBgcICQoLDA0ODxAREhM=");
         });
         const fromBase64 = soia.ByteString.fromBase64(base64);
         it("#fromBase64() works", () => {
-          expect(toArray(fromBase64)).toEqual(toArray(byteString));
+          expect(toArray(fromBase64)).toBe(toArray(byteString));
         });
       });
 
@@ -285,15 +277,15 @@ describe("ByteString", () => {
         const array = toArray(byteString);
         const base16 = byteString.toBase16();
         it("#toBase16() works", () => {
-          expect(base16).toEqual("000102030405060708090a0b0c0d0e0f10111213");
+          expect(base16).toBe("000102030405060708090a0b0c0d0e0f10111213");
         });
         it("#fromBase16() works", () => {
           const fromBase64 = soia.ByteString.fromBase16(base16);
-          expect(toArray(fromBase64)).toEqual(array);
+          expect(toArray(fromBase64)).toMatch(array);
         });
         it("#fromBase16() accepts uppercase", () => {
           const fromBase64 = soia.ByteString.fromBase16(base16.toUpperCase());
-          expect(toArray(fromBase64)).toEqual(array);
+          expect(toArray(fromBase64)).toMatch(array);
         });
       });
     });
@@ -305,7 +297,7 @@ describe("bool serializer", () => {
   const tester = new SerializerTester(serializer);
 
   it("#typeDescriptor", () => {
-    expect(serializer.typeDescriptor).toHaveSubset({
+    expect(serializer.typeDescriptor).toMatch({
       kind: "primitive",
       primitive: "bool",
       serializer: serializer,
@@ -328,7 +320,7 @@ describe("int32 serializer", () => {
   const tester = new SerializerTester(serializer);
 
   it("#typeDescriptor", () => {
-    expect(serializer.typeDescriptor).toHaveSubset({
+    expect(serializer.typeDescriptor).toMatch({
       kind: "primitive",
       primitive: "int32",
       serializer: serializer,
@@ -401,39 +393,39 @@ describe("int32 serializer", () => {
   });
 
   it("accepts string", () => {
-    expect(serializer.fromJson("0")).toEqual(0);
+    expect(serializer.fromJson("0")).toBe(0);
   });
 
   it("transforms to integer", () => {
-    expect(serializer.fromJson("2.3")).toEqual(2);
+    expect(serializer.fromJson("2.3")).toBe(2);
   });
 
   it("accepts NaN", () => {
-    expect(serializer.fromJson("NaN")).toEqual(0);
+    expect(serializer.fromJson("NaN")).toBe(0);
   });
 
   it("accepts Infinity", () => {
-    expect(serializer.fromJson("Infinity")).toEqual(0);
+    expect(serializer.fromJson("Infinity")).toBe(0);
   });
 
   it("accepts -Infinity", () => {
-    expect(serializer.fromJson("-Infinity")).toEqual(0);
+    expect(serializer.fromJson("-Infinity")).toBe(0);
   });
 
   it("accepts numbers out of int32 range", () => {
-    expect(serializer.fromJson(2147483648)).toEqual(-2147483648);
-    expect(serializer.fromJson(-2147483649)).toEqual(2147483647);
+    expect(serializer.fromJson(2147483648)).toBe(-2147483648);
+    expect(serializer.fromJson(-2147483649)).toBe(2147483647);
     expect(
       serializer.fromBinaryForm(
         soia.primitiveSerializer("int64").toBinaryForm(BigInt(2147483648))
           .toBuffer(),
       ),
-    ).toEqual(-2147483648);
+    ).toBe(-2147483648);
   });
 
   it("accepts booleans", () => {
-    expect(serializer.fromJson(false)).toEqual(0);
-    expect(serializer.fromJson(true)).toEqual(1);
+    expect(serializer.fromJson(false)).toBe(0);
+    expect(serializer.fromJson(true)).toBe(1);
   });
 });
 
@@ -442,7 +434,7 @@ describe("int64 serializer", () => {
   const tester = new SerializerTester(serializer);
 
   it("#typeDescriptor", () => {
-    expect(serializer.typeDescriptor).toHaveSubset({
+    expect(serializer.typeDescriptor).toMatch({
       kind: "primitive",
       primitive: "int64",
       serializer: serializer,
@@ -470,10 +462,10 @@ describe("int64 serializer", () => {
     typeof i === "bigint" && Number(i) === 0
   );
   it("accepts number", () => {
-    expect(serializer.fromJson(123)).toEqual(BigInt(123));
+    expect(serializer.fromJson(123)).toBe(BigInt(123));
   });
   it("accepts number outside of range", () => {
-    expect(serializer.fromJson("-99999999999999999999999999")).toEqual(
+    expect(serializer.fromJson("-99999999999999999999999999")).toBe(
       BigInt("-99999999999999999999999999"),
     );
   });
@@ -484,7 +476,7 @@ describe("uint64 serializer", () => {
   const tester = new SerializerTester(serializer);
 
   it("#typeDescriptor", () => {
-    expect(serializer.typeDescriptor).toHaveSubset({
+    expect(serializer.typeDescriptor).toMatch({
       kind: "primitive",
       primitive: "uint64",
       serializer: serializer,
@@ -512,10 +504,10 @@ describe("uint64 serializer", () => {
     typeof i === "bigint" && Number(i) === 0
   );
   it("accepts number", () => {
-    expect(serializer.fromJson(123)).toEqual(BigInt(123));
+    expect(serializer.fromJson(123)).toBe(BigInt(123));
   });
   it("accepts number outside of range", () => {
-    expect(serializer.fromJson("-99999999999999999999999999")).toEqual(
+    expect(serializer.fromJson("-99999999999999999999999999")).toBe(
       BigInt("-99999999999999999999999999"),
     );
   });
@@ -526,7 +518,7 @@ describe("float32 serializer", () => {
   const tester = new SerializerTester(serializer);
 
   it("#typeDescriptor", () => {
-    expect(serializer.typeDescriptor).toHaveSubset({
+    expect(serializer.typeDescriptor).toMatch({
       kind: "primitive",
       primitive: "float32",
       serializer: serializer,
@@ -566,8 +558,8 @@ describe("float32 serializer", () => {
     binaryFormBase16: "f0000080ff",
   });
   it("accepts string", () => {
-    expect(serializer.fromJson("0")).toEqual(0);
-    expect(serializer.fromJson("2.5")).toEqual(2.5);
+    expect(serializer.fromJson("0")).toBe(0);
+    expect(serializer.fromJson("2.5")).toBe(2.5);
   });
 });
 
@@ -576,7 +568,7 @@ describe("float64 serializer", () => {
   const tester = new SerializerTester(serializer);
 
   it("#typeDescriptor", () => {
-    expect(serializer.typeDescriptor).toHaveSubset({
+    expect(serializer.typeDescriptor).toMatch({
       kind: "primitive",
       primitive: "float64",
       serializer: serializer,
@@ -616,8 +608,8 @@ describe("float64 serializer", () => {
     binaryFormBase16: "f1000000000000f0ff",
   });
   it("accepts string", () => {
-    expect(serializer.fromJson("0")).toEqual(0);
-    expect(serializer.fromJson("2.5")).toEqual(2.5);
+    expect(serializer.fromJson("0")).toBe(0);
+    expect(serializer.fromJson("2.5")).toBe(2.5);
   });
 });
 
@@ -626,7 +618,7 @@ describe("string serializer", () => {
   const tester = new SerializerTester(serializer);
 
   it("#typeDescriptor", () => {
-    expect(serializer.typeDescriptor).toHaveSubset({
+    expect(serializer.typeDescriptor).toMatch({
       kind: "primitive",
       primitive: "string",
       serializer: serializer,
@@ -648,14 +640,12 @@ describe("string serializer", () => {
   tester.reserializeAndAssert("é".repeat(5000), {
     denseJson: "é".repeat(5000),
     binaryFormBase16: `f3e81027${"c3a9".repeat(5000)}`,
-  },
-  'reserialize "é".repeat(5000)');
+  }, 'reserialize "é".repeat(5000)');
   // See https://stackoverflow.com/questions/55056322/maximum-utf-8-string-size-given-utf-16-size
   tester.reserializeAndAssert("\uFFFF".repeat(5000), {
     denseJson: "\uFFFF".repeat(5000),
     binaryFormBase16: `f3e8983a${"efbfbf".repeat(5000)}`,
-  },
-  'reserialize "\\uFFFF".repeat(5000)');
+  }, 'reserialize "\\uFFFF".repeat(5000)');
   tester.deserializeZeroAndAssert((s) => s === "");
 });
 
@@ -664,7 +654,7 @@ describe("bytes serializer", () => {
   const tester = new SerializerTester(serializer);
 
   it("#typeDescriptor", () => {
-    expect(serializer.typeDescriptor).toHaveSubset({
+    expect(serializer.typeDescriptor).toMatch({
       kind: "primitive",
       primitive: "bytes",
       serializer: serializer,
@@ -686,13 +676,13 @@ describe("nullable serializer", () => {
   const otherSerializer = soia.primitiveSerializer("int32");
   const serializer = soia.nullableSerializer(otherSerializer);
   it("is idempotent", () => {
-    expect(soia.nullableSerializer(serializer)).toExactlyEqual(serializer);
+    expect(soia.nullableSerializer(serializer)).toMatch(serializer);
   });
 
   const tester = new SerializerTester(serializer);
 
   it("#typeDescriptor", () => {
-    expect(serializer.typeDescriptor).toHaveSubset({
+    expect(serializer.typeDescriptor).toMatch({
       kind: "nullable",
       otherType: otherSerializer.typeDescriptor,
       serializer: serializer,
@@ -716,7 +706,7 @@ describe("array serializer", () => {
   const tester = new SerializerTester(serializer);
 
   it("#typeDescriptor", () => {
-    expect(serializer.typeDescriptor).toHaveSubset({
+    expect(serializer.typeDescriptor).toMatch({
       kind: "array",
       itemType: itemSerializer.typeDescriptor,
       serializer: serializer,

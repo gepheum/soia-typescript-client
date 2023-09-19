@@ -1,4 +1,4 @@
-import { expect } from "earl";
+import { expect } from "buckwheat";
 import { describe, it } from "mocha";
 import type { Json, JsonFlavor, Serializer } from "./soia.ts";
 
@@ -28,7 +28,7 @@ export class SerializerTester<T> {
         describe(`${flavor} JSON`, () => {
           const toJsonResult = serializer.toJson(input, flavor);
           it("#toJson()", () => {
-            expect(toJsonResult).toEqual(expectedJson);
+            expect(toJsonResult).toMatch(expectedJson);
           });
           it("#toJsonCode()", () => {
             const actualJsonCode = serializer.toJsonCode(input, flavor);
@@ -37,11 +37,11 @@ export class SerializerTester<T> {
               undefined,
               flavor === "dense" ? "" : "  ",
             );
-            expect(actualJsonCode).toEqual(expectedJsonCode);
+            expect(actualJsonCode).toBe(expectedJsonCode);
           });
           it("#toJson() -> #fromJson() -> #toJson()", () => {
             const fromJsonResult = serializer.fromJson(toJsonResult);
-            expect(serializer.toJson(fromJsonResult, flavor)).toEqual(
+            expect(serializer.toJson(fromJsonResult, flavor)).toMatch(
               expectedJson,
             );
           });
@@ -49,7 +49,7 @@ export class SerializerTester<T> {
             const fromJsonResult = serializer.fromJsonCode(
               serializer.toJsonCode(input, flavor),
             );
-            expect(serializer.toJson(fromJsonResult, flavor)).toEqual(
+            expect(serializer.toJson(fromJsonResult, flavor)).toMatch(
               expectedJson,
             );
           });
@@ -60,7 +60,7 @@ export class SerializerTester<T> {
       const toBinaryFormResult = serializer.toBinaryForm(input).toBuffer();
       it("#toBinaryForm()", () => {
         const actualBase16 = toBase16(toBinaryFormResult);
-        expect(actualBase16).toEqual(expected.binaryFormBase16);
+        expect(actualBase16).toBe(expected.binaryFormBase16);
       });
       it("#toBinaryForm() -> #fromBinaryForm() -> #toBinaryForm()", () => {
         const fromBinaryFormResult = serializer.fromBinaryForm(
@@ -70,7 +70,7 @@ export class SerializerTester<T> {
           serializer.toBinaryForm(fromBinaryFormResult)
             .toBuffer(),
         );
-        expect(actualBase16).toEqual(expected.binaryFormBase16);
+        expect(actualBase16).toBe(expected.binaryFormBase16);
       });
 
       return serializer.fromJson(serializer.toJson(input));
@@ -82,11 +82,11 @@ export class SerializerTester<T> {
 
     describe("deserialize zero", () => {
       it("from JSON", () => {
-        expect(serializer.fromJson(0)).toSatisfy(isDefaultFn);
+        expect(isDefaultFn(serializer.fromJson(0))).toBe(true);
       });
       it("from binary", () => {
         const binaryForm = new ArrayBuffer(1);
-        expect(serializer.fromBinaryForm(binaryForm)).toSatisfy(isDefaultFn);
+        expect(isDefaultFn(serializer.fromBinaryForm(binaryForm))).toBe(true);
       });
     });
   }
