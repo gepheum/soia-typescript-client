@@ -1,6 +1,6 @@
 {
   "name": "soia",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "",
   "type": "module",
   "main": "./dist/cjs/soia.js",
@@ -9,10 +9,6 @@
     ".": {
       "import": "./dist/esm/soia.js",
       "require": "./dist/cjs/soia.js"
-    },
-    "./testing": {
-      "import": "./dist/esm/testing.js",
-      "require": "./dist/cjs/testing.js"
     }
   },
   "files": [
