@@ -781,7 +781,7 @@ const DECODE_NUMBER_FNS: readonly DecodeNumberFn[] = [
 
 function decodeNumber(stream: InputStream): number | bigint {
   const wire = stream.readUint8();
-  return wire < 232 ? wire : DECODE_NUMBER_FNS[wire - 232](stream);
+  return wire < 232 ? wire : DECODE_NUMBER_FNS[wire - 232]!(stream);
 }
 
 /** Parameter of the {@link InternalSerializer.encode} method. */
@@ -1408,7 +1408,7 @@ class ArraySerializerImpl<Item> //
     }
     const { itemSerializer } = this;
     for (let i = 0; i < input.length; ++i) {
-      itemSerializer.encode(input[i], stream);
+      itemSerializer.encode(input[i]!, stream);
     }
   }
 
@@ -1629,7 +1629,7 @@ class StructSerializerImpl<T> //
       for (let i = 0; i < json.length && i < slots.length; ++i) {
         const field = slots[i];
         if (field) {
-          copyable[field.property] = field.serializer.fromJson(json[i]);
+          copyable[field.property] = field.serializer.fromJson(json[i]!);
         }
         // Else the field was removed.
       }
@@ -1640,7 +1640,7 @@ class StructSerializerImpl<T> //
       for (const name in json) {
         const field = fieldMapping[name];
         if (field) {
-          copyable[field.property] = field.serializer.fromJson(json[name]);
+          copyable[field.property] = field.serializer.fromJson(json[name]!);
         }
       }
       return this.createFn(copyable);
@@ -1691,7 +1691,7 @@ class StructSerializerImpl<T> //
   private getArrayLength(input: T): number {
     const { reversedFields } = this;
     for (let i = 0; i < reversedFields.length; ++i) {
-      const field = reversedFields[i];
+      const field = reversedFields[i]!;
       const isDefault = //
         field.serializer.isDefault((input as AnyRecord)[field.property]);
       if (!isDefault) {
@@ -1724,7 +1724,7 @@ class StructSerializerImpl<T> //
   }
 
   getField<K extends string | number>(key: K): StructFieldResult<T, K> {
-    return this.fieldMapping[key];
+    return this.fieldMapping[key]!;
   }
 
   newMutable(copyable?: T | MutableForm<T>): MutableForm<T> {
@@ -1822,7 +1822,7 @@ class EnumSerializerImpl<T> //
 
   toJson(input: T, flavor?: JsonFlavor): Json {
     const kind = (input as AnyRecord).kind as string;
-    const field = this.fieldMapping[kind];
+    const field = this.fieldMapping[kind]!;
     const serializer = field.serializer;
     if (serializer) {
       const value = (input as AnyRecord).value;
@@ -1860,10 +1860,10 @@ class EnumSerializerImpl<T> //
     let valueAsJson: Json;
     if (json instanceof Array) {
       fieldKey = json[0] as number;
-      valueAsJson = json[1];
+      valueAsJson = json[1]!;
     } else if (json instanceof Object) {
       fieldKey = json["kind"] as string;
-      valueAsJson = json["value"];
+      valueAsJson = json["value"]!;
     } else {
       throw TypeError();
     }
@@ -1882,7 +1882,7 @@ class EnumSerializerImpl<T> //
 
   encode(input: T, stream: OutputStream): void {
     const kind = (input as AnyRecord).kind as string;
-    const field = this.fieldMapping[kind];
+    const field = this.fieldMapping[kind]!;
     const { number, serializer } = field;
     if (serializer) {
       // A value field.
@@ -1951,7 +1951,7 @@ class EnumSerializerImpl<T> //
   }
 
   getField<K extends string | number>(key: K): EnumFieldResult<T, K> {
-    return this.fieldMapping[key];
+    return this.fieldMapping[key]!;
   }
 
   init(

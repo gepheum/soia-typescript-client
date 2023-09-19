@@ -1,11 +1,26 @@
 {
   "name": "soia",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "",
-  "main": "dist/soia.js",
-  "types": "dist/soia.d.ts",
+  "type": "module",
+  "main": "./dist/cjs/soia.js",
+  "module": "./dist/esm/soia.js",
+  "exports": {
+    ".": {
+      "import": "./dist/esm/soia.js",
+      "require": "./dist/cjs/soia.js"
+    }
+  },
+  "files": [
+    "dist/cjs",
+    "dist/esm",
+    "src",
+    "!**/*.test.ts"
+  ],
   "scripts": {
-    "build": "tsc",
+    "build": "npm run build:cjs && npm run build:esm",
+    "build:cjs": "tsc -p ./tsconfig.cjs.json && cp static/package-cjs.json dist/cjs/package.json",
+    "build:esm": "tsc -p ./tsconfig.esm.json && cp static/package-esm.json dist/esm/package.json",
     "test": "mocha"
   },
   "repository": {
@@ -21,7 +36,7 @@
   "devDependencies": {
     "@types/mocha": "^10.0.1",
     "@types/node": "^20.6.0",
-    "buckwheat": "^1.0.0",
+    "buckwheat": "^1.0.5",
     "mocha": "^10.2.0",
     "ts-node": "^10.9.1",
     "typescript": "^5.2.2"

@@ -61,7 +61,10 @@ describe("Timestamp", () => {
     it("works", () => {
       const now = soia.Timestamp.now();
       expect(now.toDate().getFullYear()).toCompare(">=", 2023);
-      expect(now.toDate().getFullYear()).toCompare("<=", new Date().getFullYear() + 1);
+      expect(now.toDate().getFullYear()).toCompare(
+        "<=",
+        new Date().getFullYear() + 1,
+      );
     });
   });
 
@@ -269,7 +272,7 @@ describe("ByteString", () => {
         });
         const fromBase64 = soia.ByteString.fromBase64(base64);
         it("#fromBase64() works", () => {
-          expect(toArray(fromBase64)).toBe(toArray(byteString));
+          expect(toArray(fromBase64)).toMatch(toArray(byteString));
         });
       });
 
