@@ -1,6 +1,6 @@
 import { expect } from "buckwheat";
 import * as soia from "./soia.js";
-import { SerializerTester } from "./testing.js";
+import { SerializerTester } from "./serializer_tester.js";
 import { describe, it } from "mocha";
 
 describe("Timestamp", () => {
@@ -85,13 +85,13 @@ describe("Timestamp", () => {
 });
 
 describe("timestamp serializer", () => {
-  const serializer = soia.primitiveSerializer("tsmillis");
+  const serializer = soia.primitiveSerializer("timestamp");
   const tester = new SerializerTester(serializer);
 
   it("#typeDescriptor", () => {
     expect(serializer.typeDescriptor).toMatch({
       kind: "primitive",
-      primitive: "tsmillis",
+      primitive: "timestamp",
       serializer: serializer,
     });
   });

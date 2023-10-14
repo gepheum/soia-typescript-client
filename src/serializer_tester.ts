@@ -1,12 +1,12 @@
 import { expect } from "buckwheat";
 import { describe, it } from "mocha";
-import type { Json, JsonFlavor, Serializer } from "./soia.ts";
+import type { Json, JsonFlavor, MutableForm, Serializer } from "./soia.js";
 
 export class SerializerTester<T> {
   constructor(readonly serializer: Serializer<T>) {}
 
   reserializeAndAssert(
-    input: T,
+    input: T | MutableForm<T>,
     expected: {
       denseJson: Json;
       /** Defaults to `denseJson`. */

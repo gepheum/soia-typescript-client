@@ -366,7 +366,7 @@ export interface Serializer<T> {
   /** Converts the given `T` to binary format. */
   toBinaryForm(input: T | MutableForm<T>): BinaryForm;
   /** An object describing the type `T`. Enables reflective programming. */
-  typeDescriptor: TypeDescriptor<T>;
+  typeDescriptor: TypeDescriptorSpecialization<T>;
 }
 
 /**
@@ -409,22 +409,6 @@ export function nullableSerializer<T>(
 }
 
 /**
- * Specialization of `Serializer<T>` when `T` is the generated class for a
- * struct.
- */
-export interface StructSerializer<T> extends Serializer<T> {
-  typeDescriptor: StructDescriptor<T>;
-}
-
-/**
- * Specialization of `Serializer<T>` when `T` is the generated class for an
- * enum.
- */
-export interface EnumSerializer<T> extends Serializer<T> {
-  typeDescriptor: EnumDescriptor<T>;
-}
-
-/**
  * Describes the type `T`, where `T` is the TypeScript equivalent of a Soia
  * type. Enables reflective programming.
  *
@@ -437,6 +421,12 @@ export type TypeDescriptor<T = unknown> =
   | StructDescriptor<T>
   | EnumDescriptor<T>
   | PrimitiveDescriptor<T>;
+
+/** Specialization of `TypeDescriptor<T>` when `T` is known. */
+export type TypeDescriptorSpecialization<T> = //
+  [T] extends [_FrozenBase] ? StructDescriptor<T>
+    : [T] extends [_EnumBase] ? EnumDescriptor<T>
+    : TypeDescriptor<T>;
 
 /** Describes a primitive Soia type. */
 export interface PrimitiveDescriptor<T> {
@@ -456,7 +446,7 @@ export interface PrimitiveTypes {
   "uint64": bigint;
   "float32": number;
   "float64": number;
-  "tsmillis": Timestamp;
+  "timestamp": Timestamp;
   "string": string;
   "bytes": ByteString;
 }
@@ -488,7 +478,7 @@ export interface ArrayDescriptor<T> {
  */
 export interface StructDescriptor<T = unknown> {
   readonly kind: "struct";
-  readonly serializer: StructSerializer<T>;
+  readonly serializer: Serializer<T>;
   /** Name of the struct as specified in the `.soia` file. */
   readonly name: string;
   /**
@@ -572,7 +562,7 @@ export type StructFieldResult<Struct, Key extends string | number> =
 /** Describes a Soia enum. */
 export interface EnumDescriptor<T = unknown> {
   readonly kind: "enum";
-  readonly serializer: EnumSerializer<T>;
+  readonly serializer: Serializer<T>;
   /** Name of the enum as specified in the `.soia` file. */
   readonly name: string;
   /**
@@ -968,8 +958,8 @@ abstract class AbstractSerializer<T> implements InternalSerializer<T> {
     return this;
   }
 
-  get typeDescriptor(): TypeDescriptor<T> {
-    return this as unknown as TypeDescriptor<T>;
+  get typeDescriptor(): TypeDescriptorSpecialization<T> {
+    return this as unknown as TypeDescriptorSpecialization<T>;
   }
 
   abstract fromJson(json: Json): T;
@@ -1184,8 +1174,8 @@ class Uint64Serializer extends AbstractBigIntSerializer<"uint64"> {
   }
 }
 
-class TimestampSerializer extends AbstractPrimitiveSerializer<"tsmillis"> {
-  readonly primitive = "tsmillis";
+class TimestampSerializer extends AbstractPrimitiveSerializer<"timestamp"> {
+  readonly primitive = "timestamp";
   readonly defaultValue = Timestamp.UNIX_EPOCH;
 
   toJson(input: Timestamp, flavor?: JsonFlavor): string | number {
@@ -1492,7 +1482,7 @@ const PRIMITIVE_SERIALIZERS: {
   "uint64": new Uint64Serializer(),
   "float32": new Float32Serializer(),
   "float64": new Float64Serializer(),
-  "tsmillis": new TimestampSerializer(),
+  "timestamp": new TimestampSerializer(),
   "string": new StringSerializer(),
   "bytes": new ByteStringSerializer(),
 };
@@ -1550,9 +1540,8 @@ function decodeUnused(stream: InputStream): void {
   }
 }
 
-class StructSerializerImpl<T> //
-  extends AbstractSerializer<T>
-  implements StructSerializer<T>, StructDescriptor<T> {
+class StructSerializerImpl<T> extends AbstractSerializer<T>
+  implements StructDescriptor<T> {
   //
 
   constructor(frozenClass: AnyRecord) {
@@ -1715,14 +1704,6 @@ class StructSerializerImpl<T> //
     return true;
   }
 
-  get serializer(): StructSerializer<T> {
-    return this;
-  }
-
-  get typeDescriptor(): StructDescriptor<T> {
-    return this;
-  }
-
   getField<K extends string | number>(key: K): StructFieldResult<T, K> {
     return this.fieldMapping[key]!;
   }
@@ -1794,9 +1775,8 @@ class EnumValueFieldImpl<Enum, Value = unknown> {
   }
 }
 
-class EnumSerializerImpl<T> //
-  extends AbstractSerializer<T>
-  implements EnumSerializer<T>, EnumDescriptor<T> {
+class EnumSerializerImpl<T> extends AbstractSerializer<T>
+  implements EnumDescriptor<T> {
   //
 
   constructor(enumClass: AnyRecord) {
@@ -1940,14 +1920,6 @@ class EnumSerializerImpl<T> //
     const zeroField = this.zeroField as EnumValueFieldImpl<unknown>;
     return (input as AnyRecord).kind === zeroField.name &&
       zeroField.serializer.isDefault((input as AnyRecord).value);
-  }
-
-  get serializer(): EnumSerializer<T> {
-    return this;
-  }
-
-  get typeDescriptor(): EnumDescriptor<T> {
-    return this;
   }
 
   getField<K extends string | number>(key: K): EnumFieldResult<T, K> {
@@ -2158,20 +2130,20 @@ export function _toMutableArray<T>(arg: readonly T[]): T[] {
 
 export function _newStructSerializer<T extends _FrozenBase>(
   defaultValue: T,
-): StructSerializer<T> {
+): Serializer<T> {
   const clazz: AnyRecord = Object.getPrototypeOf(defaultValue).constructor;
   return new StructSerializerImpl<T>(clazz);
 }
 
 export function _newEnumSerializer<T extends _EnumBase>(
   defaultValue: T,
-): EnumSerializer<T> {
+): Serializer<T> {
   const clazz: AnyRecord = Object.getPrototypeOf(defaultValue).constructor;
   return new EnumSerializerImpl<T>(clazz);
 }
 
 export function _initStructSerializer<T extends _FrozenBase>(
-  serializer: StructSerializer<T>,
+  serializer: Serializer<T>,
   name: string,
   qualifiedName: string,
   modulePath: string,
@@ -2190,7 +2162,7 @@ export function _initStructSerializer<T extends _FrozenBase>(
 }
 
 export function _initEnumSerializer<T extends _EnumBase>(
-  serializer: EnumSerializer<T>,
+  serializer: Serializer<T>,
   name: string,
   qualifiedName: string,
   modulePath: string,
