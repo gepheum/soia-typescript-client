@@ -1891,7 +1891,7 @@ class EnumSerializerImpl<T> extends AbstractSerializer<T>
         return this.defaultValue;
       }
       if (field.serializer) {
-        return field.wrap(field.serializer.decode(stream));
+        return field.wrap(field.serializer.defaultValue);
       } else {
         return field.constant;
       }
