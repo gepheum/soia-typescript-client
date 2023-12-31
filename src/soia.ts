@@ -59,7 +59,7 @@ export class Timestamp {
   /**
    * Parses a date in the date time string format.
    *
-   * @throws if the given string is not a date i the date time string format
+   * @throws if the given string is not a date in the date time string format
    * @see https://tc39.es/ecma262/multipage/numbers-and-dates.html#sec-date-time-string-format
    */
   static parse(date: string): Timestamp {
