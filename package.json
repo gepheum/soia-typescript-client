@@ -27,7 +27,7 @@
     "type": "git",
     "url": "git+https://github.com/gepheum/soia-typescript.git"
   },
-  "author": "Osi Daro <gepheum@gmail.com>",
+  "author": "Tyler Fibonacci <gepheum@gmail.com>",
   "license": "ISC",
   "bugs": {
     "url": "https://github.com/gepheum/soia-typescript/issues"
