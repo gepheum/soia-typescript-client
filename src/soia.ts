@@ -232,7 +232,7 @@ export class ByteString {
   }
 
   at(index: number): number | undefined {
-    return this.uint8Array[index];
+    return this.uint8Array[index < 0 ? index + this.byteLength : index];
   }
 
   toString(): string {
