@@ -232,7 +232,7 @@ export class ByteString {
   }
 
   at(index: number): number | undefined {
-    return this.uint8Array.at(index);
+    return this.uint8Array[index];
   }
 
   toString(): string {
@@ -669,7 +669,7 @@ export type EnumFieldResult<Enum, Key extends string | number> =
  * Identifies a procedure (the "P" in "RPC") on both the client side and the
  * server side.
  */
-export interface Procedure<Request, Response> {
+export interface Method<Request, Response> {
   /** Name of the procedure as specified in the `.soia` file. */
   name: string;
   /**
