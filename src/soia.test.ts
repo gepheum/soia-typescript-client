@@ -242,7 +242,7 @@ describe("ByteString", () => {
         it("works", () => {
           const buffer = byteString.toBuffer();
           expect(buffer.byteLength).toBe(20);
-          expect(new Uint8Array(buffer).at(2)).toBe(2);
+          expect(new Uint8Array(buffer)[2]).toBe(2);
         });
       });
 
