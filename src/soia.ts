@@ -159,10 +159,6 @@ export class ByteString {
     }
   }
 
-  static async readFile(blob: Blob): Promise<ByteString> {
-    return new this(await blob.arrayBuffer());
-  }
-
   /**
    * Decodes a Base64 string, which can be obtained by calling `toBase64()`.
    *
