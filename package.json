@@ -26,14 +26,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/gepheum/soia-typescript.git"
+    "url": "git+https://github.com/gepheum/soia-typescript-client.git"
   },
   "author": "Tyler Fibonacci <gepheum@gmail.com>",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/gepheum/soia-typescript/issues"
+    "url": "https://github.com/gepheum/soia-typescript-client/issues"
   },
-  "homepage": "https://github.com/gepheum/soia-typescript#readme",
+  "homepage": "https://github.com/gepheum/soia-typescript-client#readme",
   "devDependencies": {
     "@types/mocha": "^10.0.1",
     "@types/node": "^20.6.0",
