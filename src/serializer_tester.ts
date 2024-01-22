@@ -21,9 +21,10 @@ export class SerializerTester<T> {
       // Test JSON serialization.
       const jsonFlavors: JsonFlavor[] = ["dense", "readable"];
       for (const flavor of jsonFlavors) {
-        const expectedJson = flavor === "dense"
-          ? expected.denseJson
-          : (expected.readableJson ?? expected.denseJson);
+        const expectedJson =
+          flavor === "dense"
+            ? expected.denseJson
+            : expected.readableJson ?? expected.denseJson;
 
         describe(`${flavor} JSON`, () => {
           const toJsonResult = serializer.toJson(input, flavor);
@@ -63,12 +64,10 @@ export class SerializerTester<T> {
         expect(actualBase16).toBe(expected.binaryFormBase16);
       });
       it("#toBinaryForm() -> #fromBinaryForm() -> #toBinaryForm()", () => {
-        const fromBinaryFormResult = serializer.fromBinaryForm(
-          toBinaryFormResult,
-        );
+        const fromBinaryFormResult =
+          serializer.fromBinaryForm(toBinaryFormResult);
         const actualBase16 = toBase16(
-          serializer.toBinaryForm(fromBinaryFormResult)
-            .toBuffer(),
+          serializer.toBinaryForm(fromBinaryFormResult).toBuffer(),
         );
         expect(actualBase16).toBe(expected.binaryFormBase16);
       });

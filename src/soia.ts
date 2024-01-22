@@ -213,9 +213,8 @@ export class ByteString {
    */
   toBase64(): string {
     // See https://developer.mozilla.org/en-US/docs/Glossary/Base64
-    const binaryString = Array.from(
-      this.uint8Array,
-      (x) => String.fromCodePoint(x),
+    const binaryString = Array.from(this.uint8Array, (x) =>
+      String.fromCodePoint(x),
     ).join("");
     return btoa(binaryString);
   }
@@ -420,9 +419,11 @@ export type TypeDescriptor<T = unknown> =
 
 /** Specialization of `TypeDescriptor<T>` when `T` is known. */
 export type TypeDescriptorSpecialization<T> = //
-  [T] extends [_FrozenBase] ? StructDescriptor<T>
-    : [T] extends [_EnumBase] ? EnumDescriptor<T>
-    : TypeDescriptor<T>;
+  [T] extends [_FrozenBase]
+    ? StructDescriptor<T>
+    : [T] extends [_EnumBase]
+      ? EnumDescriptor<T>
+      : TypeDescriptor<T>;
 
 /** Describes a primitive Soia type. */
 export interface PrimitiveDescriptor<T> {
@@ -436,15 +437,15 @@ export interface PrimitiveDescriptor<T> {
  * type.
  */
 export interface PrimitiveTypes {
-  "bool": boolean;
-  "int32": number;
-  "int64": bigint;
-  "uint64": bigint;
-  "float32": number;
-  "float64": number;
-  "timestamp": Timestamp;
-  "string": string;
-  "bytes": ByteString;
+  bool: boolean;
+  int32: number;
+  int64: bigint;
+  uint64: bigint;
+  float32: number;
+  float64: number;
+  timestamp: Timestamp;
+  string: string;
+  bytes: ByteString;
 }
 
 /**
@@ -551,9 +552,10 @@ export interface StructField<Struct = unknown, Value = unknown> {
 export type StructFieldResult<Struct, Key extends string | number> =
   | StructField<Struct>
   | (Struct extends _FrozenBase
-    ? (Key extends keyof NonNullable<Struct[typeof _COPYABLE]> ? never
-      : undefined)
-    : undefined);
+      ? Key extends keyof NonNullable<Struct[typeof _COPYABLE]>
+        ? never
+        : undefined
+      : undefined);
 
 /** Describes a Soia enum. */
 export interface EnumDescriptor<T = unknown> {
@@ -658,8 +660,11 @@ export interface EnumValueField<Enum = unknown, Value = unknown> {
  */
 export type EnumFieldResult<Enum, Key extends string | number> =
   | EnumField<Enum>
-  | (Enum extends _EnumBase ? (Key extends Enum["kind"] ? never : undefined)
-    : undefined);
+  | (Enum extends _EnumBase
+      ? Key extends Enum["kind"]
+        ? never
+        : undefined
+      : undefined);
 
 /**
  * Identifies a procedure (the "P" in "RPC") on both the client side and the
@@ -721,8 +726,10 @@ export interface Freezable<T> {
  * //   "last": "Doe"
  * // }
  */
-export type WholeOrPartial<Copyable, Accept extends "partial" | "whole"> = //
-  Accept extends "partial" ? Copyable : Required<Copyable>;
+export type WholeOrPartial<
+  Copyable,
+  Accept extends "partial" | "whole",
+> = Accept extends "partial" ? Copyable : Required<Copyable>; //
 
 // =============================================================================
 // Implementation of serializers and type descriptors
@@ -774,7 +781,7 @@ function decodeNumber(stream: InputStream): number | bigint {
 class OutputStream implements BinaryForm {
   writeUint8(value: number): void {
     const dataView = this.reserve(1);
-    dataView.setUint8((++this.offset) - 1, value);
+    dataView.setUint8(++this.offset - 1, value);
   }
 
   writeUint16(value: number): void {
@@ -894,7 +901,7 @@ class OutputStream implements BinaryForm {
     this.flush();
     const lengthInBytes = Math.max(this.byteLength, bytes);
     this.offset = 0;
-    return this.dataView = new DataView(new ArrayBuffer(lengthInBytes));
+    return (this.dataView = new DataView(new ArrayBuffer(lengthInBytes)));
   }
 
   /** Adds the current buffer to `pieces`. Updates `byteLength` accordingly. */
@@ -967,7 +974,8 @@ abstract class AbstractSerializer<T> implements InternalSerializer<T> {
 
 abstract class AbstractPrimitiveSerializer<P extends keyof PrimitiveTypes>
   extends AbstractSerializer<PrimitiveTypes[P]>
-  implements PrimitiveDescriptor<PrimitiveTypes[P]> {
+  implements PrimitiveDescriptor<PrimitiveTypes[P]>
+{
   //
 
   readonly kind = "primitive";
@@ -1039,8 +1047,9 @@ class Int32Serializer extends AbstractPrimitiveSerializer<"int32"> {
 
 const INT32_SERIALIZER = new Int32Serializer();
 
-abstract class FloatSerializer<P extends "float32" | "float64">
-  extends AbstractPrimitiveSerializer<P> {
+abstract class FloatSerializer<
+  P extends "float32" | "float64",
+> extends AbstractPrimitiveSerializer<P> {
   //
 
   readonly defaultValue = 0;
@@ -1090,8 +1099,9 @@ class Float64Serializer extends FloatSerializer<"float64"> {
   }
 }
 
-abstract class AbstractBigIntSerializer<P extends "int64" | "uint64">
-  extends AbstractPrimitiveSerializer<P> {
+abstract class AbstractBigIntSerializer<
+  P extends "int64" | "uint64",
+> extends AbstractPrimitiveSerializer<P> {
   //
 
   readonly defaultValue = BigInt(0);
@@ -1111,13 +1121,13 @@ class Int64Serializer extends AbstractBigIntSerializer<"int64"> {
     const s = BigInt(input).toString();
     // Clamp the number if it's out of bounds.
     return s.length <= 18
-      // Small optimization for "small" numbers. The max int64 has 19 digits.
-      ? s
+      ? // Small optimization for "small" numbers. The max int64 has 19 digits.
+        s
       : input < MIN_INT64
-      ? MIN_INT64.toString()
-      : input < MAX_INT64
-      ? s
-      : MAX_INT64.toString();
+        ? MIN_INT64.toString()
+        : input < MAX_INT64
+          ? s
+          : MAX_INT64.toString();
   }
 
   encode(input: bigint, stream: OutputStream): void {
@@ -1148,11 +1158,11 @@ class Uint64Serializer extends AbstractBigIntSerializer<"uint64"> {
 
   toJson(input: bigint): string {
     input = BigInt(input);
-    return (input <= 0)
+    return input <= 0
       ? "0"
-      : (MAX_UINT64 < input)
-      ? MAX_UINT64.toString()
-      : input.toString();
+      : MAX_UINT64 < input
+        ? MAX_UINT64.toString()
+        : input.toString();
   }
 
   encode(input: bigint, stream: OutputStream): void {
@@ -1182,10 +1192,10 @@ class TimestampSerializer extends AbstractPrimitiveSerializer<"timestamp"> {
 
   fromJson(json: Json): Timestamp {
     return typeof json === "number"
-      // A numeric timestamp.
-      ? Timestamp.fromUnixMillis(json)
-      // An ISO date.
-      : Timestamp.from(new Date(Date.parse(json as string)));
+      ? // A numeric timestamp.
+        Timestamp.fromUnixMillis(json)
+      : // An ISO date.
+        Timestamp.from(new Date(Date.parse(json as string)));
   }
 
   encode(input: Timestamp, stream: OutputStream): void {
@@ -1317,7 +1327,7 @@ class ByteStringSerializer extends AbstractPrimitiveSerializer<"bytes"> {
     return ByteString.sliceOf(
       stream.buffer,
       stream.offset,
-      stream.offset += lengthInBytes,
+      (stream.offset += lengthInBytes),
     );
   }
 
@@ -1329,7 +1339,8 @@ class ByteStringSerializer extends AbstractPrimitiveSerializer<"bytes"> {
 type AnyRecord = Record<string, unknown>;
 
 class StructFieldImpl<Struct, Value = unknown>
-  implements StructField<Struct, Value> {
+  implements StructField<Struct, Value>
+{
   //
 
   constructor(
@@ -1360,8 +1371,10 @@ const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 
 class ArraySerializerImpl<Item> //
-  extends AbstractSerializer<readonly Item[]> //
-  implements ArrayDescriptor<readonly Item[]> {
+  extends AbstractSerializer<readonly Item[]>
+  //
+  implements ArrayDescriptor<readonly Item[]>
+{
   //
 
   constructor(readonly itemSerializer: InternalSerializer<Item>) {
@@ -1379,9 +1392,9 @@ class ArraySerializerImpl<Item> //
     if (json === 0) {
       return _EMPTY_ARRAY;
     }
-    return freezeArray((json as readonly Json[]).map(
-      (e) => this.itemSerializer.fromJson(e),
-    ));
+    return freezeArray(
+      (json as readonly Json[]).map((e) => this.itemSerializer.fromJson(e)),
+    );
   }
 
   encode(input: ReadonlyArray<Item>, stream: OutputStream): void {
@@ -1403,7 +1416,7 @@ class ArraySerializerImpl<Item> //
     if (wire === 0 || wire === 246) {
       return _EMPTY_ARRAY;
     }
-    const length = wire === 249 ? decodeNumber(stream) as number : wire - 246;
+    const length = wire === 249 ? (decodeNumber(stream) as number) : wire - 246;
     const { itemSerializer } = this;
     const result = new Array<Item>(length);
     for (let i = 0; i < length; ++i) {
@@ -1423,7 +1436,8 @@ class ArraySerializerImpl<Item> //
 
 class NullableSerializerImpl<Other> //
   extends AbstractSerializer<Other | null>
-  implements NullableDescriptor<Other | null> {
+  implements NullableDescriptor<Other | null>
+{
   //
 
   constructor(readonly otherSerializer: InternalSerializer<Other>) {
@@ -1463,24 +1477,24 @@ class NullableSerializerImpl<Other> //
   }
 
   get otherType(): TypeDescriptor<NonNullable<Other>> {
-    return this.otherSerializer.typeDescriptor as ( //
-      TypeDescriptor<NonNullable<Other>>
-    );
+    return this.otherSerializer.typeDescriptor as TypeDescriptor< //
+      NonNullable<Other>
+    >;
   }
 }
 
 const PRIMITIVE_SERIALIZERS: {
   [P in keyof PrimitiveTypes]: Serializer<PrimitiveTypes[P]>;
 } = {
-  "bool": new BoolSerializer(),
-  "int32": INT32_SERIALIZER,
-  "int64": new Int64Serializer(),
-  "uint64": new Uint64Serializer(),
-  "float32": new Float32Serializer(),
-  "float64": new Float64Serializer(),
-  "timestamp": new TimestampSerializer(),
-  "string": new StringSerializer(),
-  "bytes": new ByteStringSerializer(),
+  bool: new BoolSerializer(),
+  int32: INT32_SERIALIZER,
+  int64: new Int64Serializer(),
+  uint64: new Uint64Serializer(),
+  float32: new Float32Serializer(),
+  float64: new Float64Serializer(),
+  timestamp: new TimestampSerializer(),
+  string: new StringSerializer(),
+  bytes: new ByteStringSerializer(),
 };
 
 type MutableConstructor<Frozen> = //
@@ -1536,8 +1550,10 @@ function decodeUnused(stream: InputStream): void {
   }
 }
 
-class StructSerializerImpl<T> extends AbstractSerializer<T>
-  implements StructDescriptor<T> {
+class StructSerializerImpl<T>
+  extends AbstractSerializer<T>
+  implements StructDescriptor<T>
+{
   //
 
   constructor(frozenClass: AnyRecord) {
@@ -1582,9 +1598,9 @@ class StructSerializerImpl<T> extends AbstractSerializer<T>
         const field = slots[i];
         result[i] = field
           ? field.serializer.toJson(
-            (input as AnyRecord)[field.property],
-            flavor,
-          )
+              (input as AnyRecord)[field.property],
+              flavor,
+            )
           : 0;
       }
       return result;
@@ -1657,7 +1673,7 @@ class StructSerializerImpl<T> extends AbstractSerializer<T>
     if (wire === 0 || wire === 246) {
       return this.defaultValue;
     }
-    const length = wire === 249 ? decodeNumber(stream) as number : wire - 246;
+    const length = wire === 249 ? (decodeNumber(stream) as number) : wire - 246;
     const copyable = { ...this.copyableTemplate };
     const { slots } = this;
     for (let i = 0; i < length && i < slots.length; ++i) {
@@ -1728,8 +1744,9 @@ class StructSerializerImpl<T> extends AbstractSerializer<T>
       this.fieldMapping[field.name] = field;
       this.fieldMapping[field.property] = field;
       this.fieldMapping[field.number] = field;
-      this.copyableTemplate[field.property] =
-        (this.defaultValue as AnyRecord)[field.property];
+      this.copyableTemplate[field.property] = (this.defaultValue as AnyRecord)[
+        field.property
+      ];
     }
     this.reversedFields = [...this.fields].sort((a, b) => b.number - a.number);
     this.removedNumbers = removedNumbers;
@@ -1762,7 +1779,7 @@ class EnumValueFieldImpl<Enum, Value = unknown> {
 
   get(e: Enum): Value | undefined {
     return (e as _EnumBase).kind === this.name
-      ? (e as AnyRecord).value as Value
+      ? ((e as AnyRecord).value as Value)
       : undefined;
   }
 
@@ -1771,8 +1788,10 @@ class EnumValueFieldImpl<Enum, Value = unknown> {
   }
 }
 
-class EnumSerializerImpl<T> extends AbstractSerializer<T>
-  implements EnumDescriptor<T> {
+class EnumSerializerImpl<T>
+  extends AbstractSerializer<T>
+  implements EnumDescriptor<T>
+{
   //
 
   constructor(enumClass: AnyRecord) {
@@ -1792,7 +1811,7 @@ class EnumSerializerImpl<T> extends AbstractSerializer<T>
   readonly fields: EnumFieldImpl<T>[] = [];
   readonly removedNumbers: number[] = [];
   private readonly fieldMapping: //
-    { [key: string | number]: EnumFieldImpl<T> } = {};
+  { [key: string | number]: EnumFieldImpl<T> } = {};
   private zeroField?: EnumFieldImpl<T>;
   initialized?: true;
 
@@ -1893,7 +1912,8 @@ class EnumSerializerImpl<T> extends AbstractSerializer<T>
       }
     } else {
       ++stream.offset;
-      const number = wire === 248 ? decodeNumber(stream) as number : wire - 250;
+      const number =
+        wire === 248 ? (decodeNumber(stream) as number) : wire - 250;
       const field = this.fieldMapping[number];
       if (!field) {
         // Unknown field.
@@ -1914,8 +1934,10 @@ class EnumSerializerImpl<T> extends AbstractSerializer<T>
     }
     // We know input is not an enum constant or else we would have returned.
     const zeroField = this.zeroField as EnumValueFieldImpl<unknown>;
-    return (input as AnyRecord).kind === zeroField.name &&
-      zeroField.serializer.isDefault((input as AnyRecord).value);
+    return (
+      (input as AnyRecord).kind === zeroField.name &&
+      zeroField.serializer.isDefault((input as AnyRecord).value)
+    );
   }
 
   getField<K extends string | number>(key: K): EnumFieldResult<T, K> {

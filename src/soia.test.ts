@@ -31,9 +31,7 @@ describe("Timestamp", () => {
       expect(
         soia.Timestamp.fromUnixMillis(soia.Timestamp.MAX.unixMillis + 1)
           .unixMillis,
-      ).toBe(
-        soia.Timestamp.MAX.unixMillis,
-      );
+      ).toBe(soia.Timestamp.MAX.unixMillis);
     });
     it("truncates to millisecond precision", () => {
       expect(soia.Timestamp.fromUnixMillis(2.8).unixMillis).toBe(3);
@@ -52,8 +50,9 @@ describe("Timestamp", () => {
 
   describe("#toDate()", () => {
     it("works", () => {
-      expect(soia.Timestamp.fromUnixMillis(1694467279837).toDate().getTime())
-        .toBe(1694467279837);
+      expect(
+        soia.Timestamp.fromUnixMillis(1694467279837).toDate().getTime(),
+      ).toBe(1694467279837);
     });
   });
 
@@ -420,7 +419,9 @@ describe("int32 serializer", () => {
     expect(serializer.fromJson(-2147483649)).toBe(2147483647);
     expect(
       serializer.fromBinaryForm(
-        soia.primitiveSerializer("int64").toBinaryForm(BigInt(2147483648))
+        soia
+          .primitiveSerializer("int64")
+          .toBinaryForm(BigInt(2147483648))
           .toBuffer(),
       ),
     ).toBe(-2147483648);
@@ -461,8 +462,8 @@ describe("int64 serializer", () => {
     denseJson: "0",
     binaryFormBase16: "00",
   });
-  tester.deserializeZeroAndAssert((i) =>
-    typeof i === "bigint" && Number(i) === 0
+  tester.deserializeZeroAndAssert(
+    (i) => typeof i === "bigint" && Number(i) === 0,
   );
   it("accepts number", () => {
     expect(serializer.fromJson(123)).toBe(BigInt(123));
@@ -503,8 +504,8 @@ describe("uint64 serializer", () => {
     denseJson: "0",
     binaryFormBase16: "00",
   });
-  tester.deserializeZeroAndAssert((i) =>
-    typeof i === "bigint" && Number(i) === 0
+  tester.deserializeZeroAndAssert(
+    (i) => typeof i === "bigint" && Number(i) === 0,
   );
   it("accepts number", () => {
     expect(serializer.fromJson(123)).toBe(BigInt(123));
@@ -640,15 +641,23 @@ describe("string serializer", () => {
     denseJson: 'Foo\n"bar"',
     binaryFormBase16: "f309466f6f0a2262617222",
   });
-  tester.reserializeAndAssert("é".repeat(5000), {
-    denseJson: "é".repeat(5000),
-    binaryFormBase16: `f3e81027${"c3a9".repeat(5000)}`,
-  }, 'reserialize "é".repeat(5000)');
+  tester.reserializeAndAssert(
+    "é".repeat(5000),
+    {
+      denseJson: "é".repeat(5000),
+      binaryFormBase16: `f3e81027${"c3a9".repeat(5000)}`,
+    },
+    'reserialize "é".repeat(5000)',
+  );
   // See https://stackoverflow.com/questions/55056322/maximum-utf-8-string-size-given-utf-16-size
-  tester.reserializeAndAssert("\uFFFF".repeat(5000), {
-    denseJson: "\uFFFF".repeat(5000),
-    binaryFormBase16: `f3e8983a${"efbfbf".repeat(5000)}`,
-  }, 'reserialize "\\uFFFF".repeat(5000)');
+  tester.reserializeAndAssert(
+    "\uFFFF".repeat(5000),
+    {
+      denseJson: "\uFFFF".repeat(5000),
+      binaryFormBase16: `f3e8983a${"efbfbf".repeat(5000)}`,
+    },
+    'reserialize "\\uFFFF".repeat(5000)',
+  );
   tester.deserializeZeroAndAssert((s) => s === "");
 });
 
