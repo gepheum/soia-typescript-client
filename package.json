@@ -2,15 +2,25 @@
   "name": "soia",
   "version": "1.0.13",
   "description": "",
+  "homepage": "https://github.com/gepheum/soia-typescript-client#readme",
+  "bugs": {
+    "url": "https://github.com/gepheum/soia-typescript-client/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gepheum/soia-typescript-client.git"
+  },
+  "license": "ISC",
+  "author": "Tyler Fibonacci <gepheum@gmail.com>",
   "type": "module",
-  "main": "./dist/cjs/soia.js",
-  "module": "./dist/esm/soia.js",
   "exports": {
     ".": {
       "import": "./dist/esm/soia.js",
       "require": "./dist/cjs/soia.js"
     }
   },
+  "main": "./dist/cjs/soia.js",
+  "module": "./dist/esm/soia.js",
   "files": [
     "dist/cjs",
     "dist/esm",
@@ -24,16 +34,6 @@
     "format": "prettier --write \"src/**/*.ts\"",
     "test": "mocha"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/gepheum/soia-typescript-client.git"
-  },
-  "author": "Tyler Fibonacci <gepheum@gmail.com>",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/gepheum/soia-typescript-client/issues"
-  },
-  "homepage": "https://github.com/gepheum/soia-typescript-client#readme",
   "devDependencies": {
     "@types/mocha": "^10.0.1",
     "@types/node": "^20.6.0",
