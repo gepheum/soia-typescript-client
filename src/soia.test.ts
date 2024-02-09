@@ -1,6 +1,6 @@
-import { expect } from "buckwheat";
-import * as soia from "./soia.js";
 import { SerializerTester } from "./serializer_tester.js";
+import * as soia from "./soia.js";
+import { expect } from "buckwheat";
 import { describe, it } from "mocha";
 
 describe("Timestamp", () => {

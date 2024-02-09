@@ -327,7 +327,7 @@ export type JsonFlavor = "dense" | "readable";
  * let jane = Person.create({firstName: "Jane", lastName: "Doe"});
  * const json = Person.SERIALIZER.toJson(jane);
  * jane = Person.SERIALIZER.fromJson(json);
- * assertEquals(jane.firstName, "Jane");
+ * expect(jane.firstName).toBe("Jane");
  */
 export interface Serializer<T> {
   /**
@@ -368,9 +368,10 @@ export interface Serializer<T> {
  * Returns a serializer of instances of the given Soia primitive type.
  *
  * @example
- * assertEquals(
- *   primitiveSerializer("string").toJsonCode("foo"),
- *   '"foo"',
+ * expect(
+ *   primitiveSerializer("string").toJsonCode("foo")
+ * ).toBe(
+ *   '"foo"'
  * );
  */
 export function primitiveSerializer<P extends keyof PrimitiveTypes>(
@@ -383,9 +384,10 @@ export function primitiveSerializer<P extends keyof PrimitiveTypes>(
  * Returns a serializer of arrays of `Item`s.
  *
  * @example
- * assertEquals(
- *   arraySerializer(User.SERIALIZER).toJsonCode([JANE, JOE]),
- *   '[["jane"],["joe"]]',
+ * expect(
+ *   arraySerializer(User.SERIALIZER).toJsonCode([JANE, JOE])
+ * ).toBe(
+ *   '[["jane"],["joe"]]'
  * );
  */
 export function arraySerializer<Item>(
@@ -650,11 +652,11 @@ export interface EnumValueField<Enum = unknown, Value = unknown> {
  * at compile-time to be the name of field, resolves to `EnumField<Enum>`.
  * Otherwise, resolves to `EnumField<Struct> | undefined`.
  *
- * @example <caption>The field is kown at compile-time</caption>
+ * @example <caption>The field is known at compile-time</caption>
  * const fieldNumber: number =
  *   Weekday.SERIALIZER.typeDescriptor.getField("MONDAY").number;
  *
- * @example <caption>The field is not kown at compile-time</caption>
+ * @example <caption>The field is not known at compile-time</caption>
  * const fieldNumber: number | undefined =
  *   Weekday.SERIALIZER.typeDescriptor.getField(variable)?.number;
  */
@@ -942,8 +944,8 @@ abstract class AbstractSerializer<T> implements InternalSerializer<T> {
   }
 
   toJsonCode(input: T, flavor?: JsonFlavor): string {
-    const space = flavor !== "readable" ? undefined : "  ";
-    return JSON.stringify(this.toJson(input, flavor), undefined, space);
+    const indent = flavor === "readable" ? "  " : undefined;
+    return JSON.stringify(this.toJson(input, flavor), undefined, indent);
   }
 
   toBinaryForm(input: T): BinaryForm {
@@ -976,8 +978,6 @@ abstract class AbstractPrimitiveSerializer<P extends keyof PrimitiveTypes>
   extends AbstractSerializer<PrimitiveTypes[P]>
   implements PrimitiveDescriptor<PrimitiveTypes[P]>
 {
-  //
-
   readonly kind = "primitive";
   abstract readonly primitive: P;
 }
@@ -1185,9 +1185,9 @@ class TimestampSerializer extends AbstractPrimitiveSerializer<"timestamp"> {
   readonly defaultValue = Timestamp.UNIX_EPOCH;
 
   toJson(input: Timestamp, flavor?: JsonFlavor): string | number {
-    return flavor !== "readable"
-      ? input.unixMillis
-      : input.toDate().toISOString();
+    return flavor === "readable"
+      ? input.toDate().toISOString()
+      : input.unixMillis;
   }
 
   fromJson(json: Json): Timestamp {
@@ -1477,7 +1477,8 @@ class NullableSerializerImpl<Other> //
   }
 
   get otherType(): TypeDescriptor<NonNullable<Other>> {
-    return this.otherSerializer.typeDescriptor as TypeDescriptor< //
+    return this.otherSerializer.typeDescriptor as TypeDescriptor<
+      //
       NonNullable<Other>
     >;
   }
@@ -1554,8 +1555,6 @@ class StructSerializerImpl<T>
   extends AbstractSerializer<T>
   implements StructDescriptor<T>
 {
-  //
-
   constructor(frozenClass: AnyRecord) {
     super();
     this.defaultValue = frozenClass.DEFAULT as T;
@@ -1585,9 +1584,21 @@ class StructSerializerImpl<T>
 
   toJson(input: T, flavor?: JsonFlavor): Json {
     if (input === this.defaultValue) {
-      return flavor !== "readable" ? [] : {};
+      return flavor === "readable" ? {} : [];
     }
-    if (flavor !== "readable") {
+    if (flavor === "readable") {
+      const { fields } = this;
+      const result: { [name: string]: Json } = {};
+      for (const field of fields) {
+        const { serializer } = field;
+        const value = (input as AnyRecord)[field.property];
+        if (field.serializer.isDefault(value)) {
+          continue;
+        }
+        result[field.name] = serializer.toJson(value, flavor);
+      }
+      return result;
+    } else {
       // Dense flavor.
       const { slots } = this;
 
@@ -1602,19 +1613,6 @@ class StructSerializerImpl<T>
               flavor,
             )
           : 0;
-      }
-      return result;
-    } else {
-      // Readable flavor.
-      const { fields } = this;
-      const result: { [name: string]: Json } = {};
-      for (const field of fields) {
-        const { serializer } = field;
-        const value = (input as AnyRecord)[field.property];
-        if (field.serializer.isDefault(value)) {
-          continue;
-        }
-        result[field.name] = serializer.toJson(value, flavor);
       }
       return result;
     }
@@ -1796,7 +1794,7 @@ class EnumSerializerImpl<T>
 
   constructor(enumClass: AnyRecord) {
     super();
-    this.defaultValue = enumClass.DEFAULT as T;
+    this.defaultValue = enumClass["?"] as T;
     this.createFn = enumClass.create as (k: string, v: unknown) => T;
   }
 
@@ -1810,30 +1808,31 @@ class EnumSerializerImpl<T>
   parentType: StructDescriptor | EnumDescriptor | undefined;
   readonly fields: EnumFieldImpl<T>[] = [];
   readonly removedNumbers: number[] = [];
-  private readonly fieldMapping: //
-  { [key: string | number]: EnumFieldImpl<T> } = {};
-  private zeroField?: EnumFieldImpl<T>;
+  private readonly fieldMapping: { [key: string | number]: EnumFieldImpl<T> } =
+    {};
   initialized?: true;
 
   toJson(input: T, flavor?: JsonFlavor): Json {
     const kind = (input as AnyRecord).kind as string;
+    if (kind === "?") {
+      return flavor === "readable" ? "?" : 0;
+    }
     const field = this.fieldMapping[kind]!;
     const serializer = field.serializer;
     if (serializer) {
       const value = (input as AnyRecord).value;
-      if (flavor !== "readable") {
-        // Dense flavor.
-        return [field.number, serializer.toJson(value, flavor)];
-      } else {
-        // Readable flavor.
+      if (flavor === "readable") {
         return {
           kind: field.name,
           value: serializer.toJson(value, flavor),
         };
+      } else {
+        // Dense flavor.
+        return [field.number, serializer.toJson(value, flavor)];
       }
     } else {
       // A constant field.
-      return flavor !== "readable" ? field.number : field.name;
+      return flavor === "readable" ? field.name : field.number;
     }
   }
 
@@ -1842,7 +1841,7 @@ class EnumSerializerImpl<T>
     if (isNumber || typeof json === "string") {
       const field = this.fieldMapping[isNumber ? json : String(json)];
       if (!field) {
-        // Unknown field.
+        // Unrecognized field.
         return this.defaultValue;
       }
       if (field.serializer) {
@@ -1869,7 +1868,6 @@ class EnumSerializerImpl<T>
     }
     const { serializer } = field;
     if (!serializer) {
-      // TODO: explain
       return field.constant;
     }
     return field.wrap(serializer.fromJson(valueAsJson));
@@ -1877,6 +1875,10 @@ class EnumSerializerImpl<T>
 
   encode(input: T, stream: OutputStream): void {
     const kind = (input as AnyRecord).kind as string;
+    if (kind === "?") {
+      stream.writeUint8(0);
+      return;
+    }
     const field = this.fieldMapping[kind]!;
     const { number, serializer } = field;
     if (serializer) {
@@ -1922,22 +1924,13 @@ class EnumSerializerImpl<T>
       if (field.serializer) {
         return field.wrap(field.serializer.decode(stream));
       } else {
-        // TODO: explain
         return field.constant;
       }
     }
   }
 
   isDefault(input: T): boolean {
-    if (input === this.defaultValue) {
-      return true;
-    }
-    // We know input is not an enum constant or else we would have returned.
-    const zeroField = this.zeroField as EnumValueFieldImpl<unknown>;
-    return (
-      (input as AnyRecord).kind === zeroField.name &&
-      zeroField.serializer.isDefault((input as AnyRecord).value)
-    );
+    return input === this.defaultValue;
   }
 
   getField<K extends string | number>(key: K): EnumFieldResult<T, K> {
@@ -1972,9 +1965,6 @@ class EnumSerializerImpl<T>
       this.fields.push(field);
       this.fieldMapping[field.name] = field;
       this.fieldMapping[field.number] = field;
-      if (field.number === 0) {
-        this.zeroField = field;
-      }
     }
     this.removedNumbers.push(...removedNumbers);
     this.initialized = true;

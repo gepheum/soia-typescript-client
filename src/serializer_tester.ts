@@ -1,6 +1,6 @@
+import type { Json, JsonFlavor, MutableForm, Serializer } from "./soia.js";
 import { expect } from "buckwheat";
 import { describe, it } from "mocha";
-import type { Json, JsonFlavor, MutableForm, Serializer } from "./soia.js";
 
 export class SerializerTester<T> {
   constructor(readonly serializer: Serializer<T>) {}
