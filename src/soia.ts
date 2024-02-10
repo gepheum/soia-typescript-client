@@ -430,7 +430,6 @@ export type TypeDescriptorSpecialization<T> = //
 /** Describes a primitive Soia type. */
 export interface PrimitiveDescriptor<T> {
   kind: "primitive";
-  serializer: Serializer<T>;
   primitive: keyof PrimitiveTypes;
 }
 
@@ -456,7 +455,6 @@ export interface PrimitiveTypes {
  */
 export interface NullableDescriptor<T> {
   readonly kind: "nullable";
-  readonly serializer: Serializer<T>;
   /** Describes the other (non-nullable) type. */
   readonly otherType: TypeDescriptor<NonNullable<T>>;
 }
@@ -464,7 +462,6 @@ export interface NullableDescriptor<T> {
 /** Describes an array type. */
 export interface ArrayDescriptor<T> {
   readonly kind: "array";
-  readonly serializer: Serializer<T>;
   /** Describes the type of the array items. */
   readonly itemType: TypeDescriptor<
     T extends ReadonlyArray<infer Item> ? Item : unknown
@@ -477,7 +474,6 @@ export interface ArrayDescriptor<T> {
  */
 export interface StructDescriptor<T = unknown> {
   readonly kind: "struct";
-  readonly serializer: Serializer<T>;
   /** Name of the struct as specified in the `.soia` file. */
   readonly name: string;
   /**
@@ -562,7 +558,6 @@ export type StructFieldResult<Struct, Key extends string | number> =
 /** Describes a Soia enum. */
 export interface EnumDescriptor<T = unknown> {
   readonly kind: "enum";
-  readonly serializer: Serializer<T>;
   /** Name of the enum as specified in the `.soia` file. */
   readonly name: string;
   /**
@@ -959,10 +954,6 @@ abstract class AbstractSerializer<T> implements InternalSerializer<T> {
     return !input;
   }
 
-  get serializer(): Serializer<T> {
-    return this;
-  }
-
   get typeDescriptor(): TypeDescriptorSpecialization<T> {
     return this as unknown as TypeDescriptorSpecialization<T>;
   }
@@ -1050,8 +1041,6 @@ const INT32_SERIALIZER = new Int32Serializer();
 abstract class FloatSerializer<
   P extends "float32" | "float64",
 > extends AbstractPrimitiveSerializer<P> {
-  //
-
   readonly defaultValue = 0;
 
   toJson(input: number): number | string {
@@ -1102,8 +1091,6 @@ class Float64Serializer extends FloatSerializer<"float64"> {
 abstract class AbstractBigIntSerializer<
   P extends "int64" | "uint64",
 > extends AbstractPrimitiveSerializer<P> {
-  //
-
   readonly defaultValue = BigInt(0);
 
   fromJson(json: Json): bigint {
@@ -1341,8 +1328,6 @@ type AnyRecord = Record<string, unknown>;
 class StructFieldImpl<Struct, Value = unknown>
   implements StructField<Struct, Value>
 {
-  //
-
   constructor(
     readonly name: string,
     readonly property: string,
@@ -1372,11 +1357,8 @@ const textDecoder = new TextDecoder();
 
 class ArraySerializerImpl<Item> //
   extends AbstractSerializer<readonly Item[]>
-  //
   implements ArrayDescriptor<readonly Item[]>
 {
-  //
-
   constructor(readonly itemSerializer: InternalSerializer<Item>) {
     super();
   }
@@ -1438,8 +1420,6 @@ class NullableSerializerImpl<Other> //
   extends AbstractSerializer<Other | null>
   implements NullableDescriptor<Other | null>
 {
-  //
-
   constructor(readonly otherSerializer: InternalSerializer<Other>) {
     super();
   }
@@ -1790,8 +1770,6 @@ class EnumSerializerImpl<T>
   extends AbstractSerializer<T>
   implements EnumDescriptor<T>
 {
-  //
-
   constructor(enumClass: AnyRecord) {
     super();
     this.defaultValue = enumClass["?"] as T;

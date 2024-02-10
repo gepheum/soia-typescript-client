@@ -1,7 +1,101 @@
-import { SerializerTester } from "./serializer_tester.js";
 import * as soia from "./soia.js";
 import { expect } from "buckwheat";
 import { describe, it } from "mocha";
+
+class SerializerTester<T> {
+  constructor(readonly serializer: soia.Serializer<T>) {}
+
+  reserializeAndAssert(
+    input: T | soia.MutableForm<T>,
+    expected: {
+      denseJson: soia.Json;
+      /** Defaults to `denseJson`. */
+      readableJson?: soia.Json;
+      binaryFormBase16: string;
+    },
+    description?: string,
+  ) {
+    describe(description ?? `reserialize ${input}`, () => {
+      const { serializer } = this;
+
+      // Test JSON serialization.
+      const jsonFlavors: soia.JsonFlavor[] = ["dense", "readable"];
+      for (const flavor of jsonFlavors) {
+        const expectedJson =
+          flavor === "dense"
+            ? expected.denseJson
+            : expected.readableJson ?? expected.denseJson;
+
+        describe(`${flavor} JSON`, () => {
+          const toJsonResult = serializer.toJson(input, flavor);
+          it("#toJson()", () => {
+            expect(toJsonResult).toMatch(expectedJson);
+          });
+          it("#toJsonCode()", () => {
+            const actualJsonCode = serializer.toJsonCode(input, flavor);
+            const expectedJsonCode = JSON.stringify(
+              expectedJson,
+              undefined,
+              flavor === "dense" ? "" : "  ",
+            );
+            expect(actualJsonCode).toBe(expectedJsonCode);
+          });
+          it("#toJson() -> #fromJson() -> #toJson()", () => {
+            const fromJsonResult = serializer.fromJson(toJsonResult);
+            expect(serializer.toJson(fromJsonResult, flavor)).toMatch(
+              expectedJson,
+            );
+          });
+          it("#toJsonCode() -> #fromJsonCode() -> #toJson()", () => {
+            const fromJsonResult = serializer.fromJsonCode(
+              serializer.toJsonCode(input, flavor),
+            );
+            expect(serializer.toJson(fromJsonResult, flavor)).toMatch(
+              expectedJson,
+            );
+          });
+        });
+      }
+
+      // Test binary serialization.
+      const toBinaryFormResult = serializer.toBinaryForm(input).toBuffer();
+      it("#toBinaryForm()", () => {
+        const actualBase16 = toBase16(toBinaryFormResult);
+        expect(actualBase16).toBe(expected.binaryFormBase16);
+      });
+      it("#toBinaryForm() -> #fromBinaryForm() -> #toBinaryForm()", () => {
+        const fromBinaryFormResult =
+          serializer.fromBinaryForm(toBinaryFormResult);
+        const actualBase16 = toBase16(
+          serializer.toBinaryForm(fromBinaryFormResult).toBuffer(),
+        );
+        expect(actualBase16).toBe(expected.binaryFormBase16);
+      });
+
+      return serializer.fromJson(serializer.toJson(input));
+    });
+  }
+
+  deserializeZeroAndAssert(isDefaultFn: (input: T) => boolean): void {
+    const { serializer } = this;
+
+    describe("deserialize zero", () => {
+      it("from JSON", () => {
+        expect(isDefaultFn(serializer.fromJson(0))).toBe(true);
+      });
+      it("from binary", () => {
+        const binaryForm = new ArrayBuffer(1);
+        expect(isDefaultFn(serializer.fromBinaryForm(binaryForm))).toBe(true);
+      });
+    });
+  }
+}
+
+function toBase16(buffer: ArrayBuffer): string {
+  return [...new Uint8Array(buffer)]
+    .map((x) => x.toString(16).padStart(2, "0"))
+    .join("");
+}
 
 describe("Timestamp", () => {
   it("#MIN is min timestamp rerpresentable as Date objects", () => {
@@ -91,7 +185,6 @@ describe("timestamp serializer", () => {
     expect(serializer.typeDescriptor).toMatch({
       kind: "primitive",
       primitive: "timestamp",
-      serializer: serializer,
     });
   });
 
@@ -302,7 +395,6 @@ describe("bool serializer", () => {
     expect(serializer.typeDescriptor).toMatch({
       kind: "primitive",
       primitive: "bool",
-      serializer: serializer,
     });
   });
 
@@ -325,7 +417,6 @@ describe("int32 serializer", () => {
     expect(serializer.typeDescriptor).toMatch({
       kind: "primitive",
       primitive: "int32",
-      serializer: serializer,
     });
   });
 
@@ -441,7 +532,6 @@ describe("int64 serializer", () => {
     expect(serializer.typeDescriptor).toMatch({
       kind: "primitive",
       primitive: "int64",
-      serializer: serializer,
     });
   });
 
@@ -483,7 +573,6 @@ describe("uint64 serializer", () => {
     expect(serializer.typeDescriptor).toMatch({
       kind: "primitive",
       primitive: "uint64",
-      serializer: serializer,
     });
   });
 
@@ -525,7 +614,6 @@ describe("float32 serializer", () => {
     expect(serializer.typeDescriptor).toMatch({
       kind: "primitive",
       primitive: "float32",
-      serializer: serializer,
     });
   });
 
@@ -575,7 +663,6 @@ describe("float64 serializer", () => {
     expect(serializer.typeDescriptor).toMatch({
       kind: "primitive",
       primitive: "float64",
-      serializer: serializer,
     });
   });
 
@@ -625,7 +712,6 @@ describe("string serializer", () => {
     expect(serializer.typeDescriptor).toMatch({
       kind: "primitive",
       primitive: "string",
-      serializer: serializer,
     });
   });
 
@@ -669,7 +755,6 @@ describe("bytes serializer", () => {
     expect(serializer.typeDescriptor).toMatch({
       kind: "primitive",
       primitive: "bytes",
-      serializer: serializer,
     });
   });
 
@@ -697,7 +782,6 @@ describe("nullable serializer", () => {
     expect(serializer.typeDescriptor).toMatch({
       kind: "nullable",
       otherType: otherSerializer.typeDescriptor,
-      serializer: serializer,
     });
   });
 
@@ -721,7 +805,6 @@ describe("array serializer", () => {
     expect(serializer.typeDescriptor).toMatch({
       kind: "array",
       itemType: itemSerializer.typeDescriptor,
-      serializer: serializer,
     });
   });
 
