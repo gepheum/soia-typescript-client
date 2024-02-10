@@ -2073,7 +2073,7 @@ export abstract class _EnumBase {
   switch<T>(switcher: unknown): unknown {
     const callback =
       (switcher as AnyRecord)[(this as AnyRecord).kind as string] ||
-      (switcher as AnyRecord).fallbackTo;
+      (switcher as AnyRecord)["*"];
     const { value } = this as AnyRecord;
     if (value !== undefined) {
       return (callback as (v: unknown) => T)(value);
