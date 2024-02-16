@@ -1,101 +1,7 @@
+import { SerializerTester } from "./serializer_tester.js";
 import * as soia from "./soia.js";
 import { expect } from "buckwheat";
 import { describe, it } from "mocha";
-
-class SerializerTester<T> {
-  constructor(readonly serializer: soia.Serializer<T>) {}
-
-  reserializeAndAssert(
-    input: T | soia.MutableForm<T>,
-    expected: {
-      denseJson: soia.Json;
-      /** Defaults to `denseJson`. */
-      readableJson?: soia.Json;
-      binaryFormBase16: string;
-    },
-    description?: string,
-  ) {
-    describe(description ?? `reserialize ${input}`, () => {
-      const { serializer } = this;
-
-      // Test JSON serialization.
-      const jsonFlavors: soia.JsonFlavor[] = ["dense", "readable"];
-      for (const flavor of jsonFlavors) {
-        const expectedJson =
-          flavor === "dense"
-            ? expected.denseJson
-            : expected.readableJson ?? expected.denseJson;
-
-        describe(`${flavor} JSON`, () => {
-          const toJsonResult = serializer.toJson(input, flavor);
-          it("#toJson()", () => {
-            expect(toJsonResult).toMatch(expectedJson);
-          });
-          it("#toJsonCode()", () => {
-            const actualJsonCode = serializer.toJsonCode(input, flavor);
-            const expectedJsonCode = JSON.stringify(
-              expectedJson,
-              undefined,
-              flavor === "dense" ? "" : "  ",
-            );
-            expect(actualJsonCode).toBe(expectedJsonCode);
-          });
-          it("#toJson() -> #fromJson() -> #toJson()", () => {
-            const fromJsonResult = serializer.fromJson(toJsonResult);
-            expect(serializer.toJson(fromJsonResult, flavor)).toMatch(
-              expectedJson,
-            );
-          });
-          it("#toJsonCode() -> #fromJsonCode() -> #toJson()", () => {
-            const fromJsonResult = serializer.fromJsonCode(
-              serializer.toJsonCode(input, flavor),
-            );
-            expect(serializer.toJson(fromJsonResult, flavor)).toMatch(
-              expectedJson,
-            );
-          });
-        });
-      }
-
-      // Test binary serialization.
-      const toBinaryFormResult = serializer.toBinaryForm(input).toBuffer();
-      it("#toBinaryForm()", () => {
-        const actualBase16 = toBase16(toBinaryFormResult);
-        expect(actualBase16).toBe(expected.binaryFormBase16);
-      });
-      it("#toBinaryForm() -> #fromBinaryForm() -> #toBinaryForm()", () => {
-        const fromBinaryFormResult =
-          serializer.fromBinaryForm(toBinaryFormResult);
-        const actualBase16 = toBase16(
-          serializer.toBinaryForm(fromBinaryFormResult).toBuffer(),
-        );
-        expect(actualBase16).toBe(expected.binaryFormBase16);
-      });
-
-      return serializer.fromJson(serializer.toJson(input));
-    });
-  }
-
-  deserializeZeroAndAssert(isDefaultFn: (input: T) => boolean): void {
-    const { serializer } = this;
-
-    describe("deserialize zero", () => {
-      it("from JSON", () => {
-        expect(isDefaultFn(serializer.fromJson(0))).toBe(true);
-      });
-      it("from binary", () => {
-        const binaryForm = new ArrayBuffer(1);
-        expect(isDefaultFn(serializer.fromBinaryForm(binaryForm))).toBe(true);
-      });
-    });
-  }
-}
-
-function toBase16(buffer: ArrayBuffer): string {
-  return [...new Uint8Array(buffer)]
-    .map((x) => x.toString(16).padStart(2, "0"))
-    .join("");
-}
 
 describe("Timestamp", () => {
   it("#MIN is min timestamp rerpresentable as Date objects", () => {
@@ -193,7 +99,7 @@ describe("timestamp serializer", () => {
     {
       denseJson: 0,
       readableJson: "1970-01-01T00:00:00.000Z",
-      binaryFormBase16: "00",
+      bytesAsBase16: "00",
     },
     "reserialize Unix EPOCH",
   );
@@ -203,7 +109,7 @@ describe("timestamp serializer", () => {
     {
       denseJson: 1692999034586,
       readableJson: "2023-08-25T21:30:34.586Z",
-      binaryFormBase16: "efda269b2e8a010000",
+      bytesAsBase16: "efda269b2e8a010000",
     },
     "reserialize normal timestamp",
   );
@@ -213,7 +119,7 @@ describe("timestamp serializer", () => {
     {
       denseJson: -1692999034586,
       readableJson: "1916-05-09T02:29:25.414Z",
-      binaryFormBase16: "ef26d964d175feffff",
+      bytesAsBase16: "ef26d964d175feffff",
     },
     "reserialize negative timestamp",
   );
@@ -224,8 +130,6 @@ describe("timestamp serializer", () => {
 });
 
 describe("ByteString", () => {
-  // TODO: test all innstance methods on both a slice and a non-slice
-
   const makeTestByteArray = (length = 4, start = 0) => {
     const array: number[] = [];
     for (let i = 0; i < length; ++i) {
@@ -400,11 +304,11 @@ describe("bool serializer", () => {
 
   tester.reserializeAndAssert(true, {
     denseJson: true,
-    binaryFormBase16: "01",
+    bytesAsBase16: "01",
   });
   tester.reserializeAndAssert(false, {
     denseJson: false,
-    binaryFormBase16: "00",
+    bytesAsBase16: "00",
   });
   tester.deserializeZeroAndAssert((input) => input === false);
 });
@@ -422,67 +326,69 @@ describe("int32 serializer", () => {
 
   tester.reserializeAndAssert(2, {
     denseJson: 2,
-    binaryFormBase16: "02",
+    bytesAsBase16: "02",
   });
   tester.reserializeAndAssert(0, {
     denseJson: 0,
-    binaryFormBase16: "00",
+    bytesAsBase16: "00",
   });
   tester.reserializeAndAssert(-1, {
     denseJson: -1,
-    binaryFormBase16: "ebff",
+    bytesAsBase16: "ebff",
   });
   tester.reserializeAndAssert(2.8, {
     denseJson: 2,
-    binaryFormBase16: "02",
+    bytesAsBase16: "02",
   });
   tester.reserializeAndAssert(-3.8, {
     denseJson: -3,
-    binaryFormBase16: "ebfc",
+    bytesAsBase16: "ebfc",
+    denseJsonFromReserialized: -4,
+    lossy: true,
   });
   tester.reserializeAndAssert(231, {
     denseJson: 231,
-    binaryFormBase16: "e7",
+    bytesAsBase16: "e7",
   });
   tester.reserializeAndAssert(232, {
     denseJson: 232,
-    binaryFormBase16: "e8e800",
+    bytesAsBase16: "e8e800",
   });
   tester.reserializeAndAssert(65535, {
     denseJson: 65535,
-    binaryFormBase16: "e8ffff",
+    bytesAsBase16: "e8ffff",
   });
   tester.reserializeAndAssert(65536, {
     denseJson: 65536,
-    binaryFormBase16: "e900000100",
+    bytesAsBase16: "e900000100",
   });
   tester.reserializeAndAssert(2147483647, {
     denseJson: 2147483647,
-    binaryFormBase16: "e9ffffff7f",
+    bytesAsBase16: "e9ffffff7f",
   });
   tester.reserializeAndAssert(-255, {
     denseJson: -255,
-    binaryFormBase16: "eb01",
+    bytesAsBase16: "eb01",
   });
   tester.reserializeAndAssert(-256, {
     denseJson: -256,
-    binaryFormBase16: "eb00",
+    bytesAsBase16: "eb00",
   });
   tester.reserializeAndAssert(-257, {
     denseJson: -257,
-    binaryFormBase16: "ecfffe",
+    bytesAsBase16: "ecfffe",
   });
   tester.reserializeAndAssert(-65536, {
     denseJson: -65536,
-    binaryFormBase16: "ec0000",
+    bytesAsBase16: "ec0000",
   });
   tester.reserializeAndAssert(-65537, {
     denseJson: -65537,
-    binaryFormBase16: "edfffffeff",
+    bytesAsBase16: "edfffffeff",
   });
   tester.reserializeAndAssert(-2147483648, {
     denseJson: -2147483648,
-    binaryFormBase16: "ed00000080",
+    bytesAsBase16: "ed00000080",
   });
 
   it("accepts string", () => {
@@ -509,10 +415,10 @@ describe("int32 serializer", () => {
     expect(serializer.fromJson(2147483648)).toBe(-2147483648);
     expect(serializer.fromJson(-2147483649)).toBe(2147483647);
     expect(
-      serializer.fromBinaryForm(
+      serializer.fromBytes(
         soia
           .primitiveSerializer("int64")
-          .toBinaryForm(BigInt(2147483648))
+          .toBytes(BigInt(2147483648))
           .toBuffer(),
       ),
     ).toBe(-2147483648);
@@ -537,20 +443,20 @@ describe("int64 serializer", () => {
 
   tester.reserializeAndAssert(BigInt("888888888888"), {
     denseJson: "888888888888",
-    binaryFormBase16: "ee380ee8f5ce000000",
+    bytesAsBase16: "ee380ee8f5ce000000",
   });
   // Numbers outside of bounds are clamped.
   tester.reserializeAndAssert(BigInt("9223372036854775808"), {
     denseJson: "9223372036854775807",
-    binaryFormBase16: "eeffffffffffffff7f",
+    bytesAsBase16: "eeffffffffffffff7f",
   });
   tester.reserializeAndAssert(BigInt("-9223372036854775809"), {
     denseJson: "-9223372036854775808",
-    binaryFormBase16: "ee0000000000000080",
+    bytesAsBase16: "ee0000000000000080",
   });
   tester.reserializeAndAssert(BigInt("0"), {
     denseJson: "0",
-    binaryFormBase16: "00",
+    bytesAsBase16: "00",
   });
   tester.deserializeZeroAndAssert(
     (i) => typeof i === "bigint" && Number(i) === 0,
@@ -578,20 +484,20 @@ describe("uint64 serializer", () => {
 
   tester.reserializeAndAssert(BigInt("888888888888"), {
     denseJson: "888888888888",
-    binaryFormBase16: "ea380ee8f5ce000000",
+    bytesAsBase16: "ea380ee8f5ce000000",
   });
   // Numbers outside of bounds are clamped.
   tester.reserializeAndAssert(BigInt("18446744073709551616"), {
     denseJson: "18446744073709551615",
-    binaryFormBase16: "eaffffffffffffffff",
+    bytesAsBase16: "eaffffffffffffffff",
   });
   tester.reserializeAndAssert(BigInt("-1"), {
     denseJson: "0",
-    binaryFormBase16: "00",
+    bytesAsBase16: "00",
   });
   tester.reserializeAndAssert(BigInt("0"), {
     denseJson: "0",
-    binaryFormBase16: "00",
+    bytesAsBase16: "00",
   });
   tester.deserializeZeroAndAssert(
     (i) => typeof i === "bigint" && Number(i) === 0,
@@ -619,35 +525,43 @@ describe("float32 serializer", () => {
 
   tester.reserializeAndAssert(2, {
     denseJson: 2,
-    binaryFormBase16: "f000000040",
+    bytesAsBase16: "f000000040",
   });
   tester.reserializeAndAssert(0, {
     denseJson: 0,
-    binaryFormBase16: "00",
+    bytesAsBase16: "00",
   });
   tester.reserializeAndAssert(-1, {
     denseJson: -1,
-    binaryFormBase16: "f0000080bf",
+    bytesAsBase16: "f0000080bf",
+  });
+  tester.reserializeAndAssert(-1.5, {
+    denseJson: -1.5,
+    bytesAsBase16: "f00000c0bf",
   });
   tester.reserializeAndAssert(2.8, {
     denseJson: 2.8,
-    binaryFormBase16: "f033333340",
+    bytesAsBase16: "f033333340",
+    denseJsonFromReserialized: 2.799999952316284,
+    lossy: true,
   });
   tester.reserializeAndAssert(-3.8, {
     denseJson: -3.8,
-    binaryFormBase16: "f0333373c0",
+    bytesAsBase16: "f0333373c0",
+    denseJsonFromReserialized: -3.799999952316284,
+    lossy: true,
   });
   tester.reserializeAndAssert(Number.NaN, {
     denseJson: "NaN",
-    binaryFormBase16: "f00000c07f",
+    bytesAsBase16: "f00000c07f",
   });
   tester.reserializeAndAssert(Number.POSITIVE_INFINITY, {
     denseJson: "Infinity",
-    binaryFormBase16: "f00000807f",
+    bytesAsBase16: "f00000807f",
   });
   tester.reserializeAndAssert(Number.NEGATIVE_INFINITY, {
     denseJson: "-Infinity",
-    binaryFormBase16: "f0000080ff",
+    bytesAsBase16: "f0000080ff",
   });
   it("accepts string", () => {
     expect(serializer.fromJson("0")).toBe(0);
@@ -668,35 +582,35 @@ describe("float64 serializer", () => {
 
   tester.reserializeAndAssert(2, {
     denseJson: 2,
-    binaryFormBase16: "f10000000000000040",
+    bytesAsBase16: "f10000000000000040",
   });
   tester.reserializeAndAssert(0, {
     denseJson: 0,
-    binaryFormBase16: "00",
+    bytesAsBase16: "00",
   });
   tester.reserializeAndAssert(-1, {
     denseJson: -1,
-    binaryFormBase16: "f1000000000000f0bf",
+    bytesAsBase16: "f1000000000000f0bf",
   });
   tester.reserializeAndAssert(2.8, {
     denseJson: 2.8,
-    binaryFormBase16: "f16666666666660640",
+    bytesAsBase16: "f16666666666660640",
   });
   tester.reserializeAndAssert(-3.8, {
     denseJson: -3.8,
-    binaryFormBase16: "f16666666666660ec0",
+    bytesAsBase16: "f16666666666660ec0",
   });
   tester.reserializeAndAssert(Number.NaN, {
     denseJson: "NaN",
-    binaryFormBase16: "f1000000000000f87f",
+    bytesAsBase16: "f1000000000000f87f",
   });
   tester.reserializeAndAssert(Number.POSITIVE_INFINITY, {
     denseJson: "Infinity",
-    binaryFormBase16: "f1000000000000f07f",
+    bytesAsBase16: "f1000000000000f07f",
   });
   tester.reserializeAndAssert(Number.NEGATIVE_INFINITY, {
     denseJson: "-Infinity",
-    binaryFormBase16: "f1000000000000f0ff",
+    bytesAsBase16: "f1000000000000f0ff",
   });
   it("accepts string", () => {
     expect(serializer.fromJson("0")).toBe(0);
@@ -717,21 +631,21 @@ describe("string serializer", () => {
 
   tester.reserializeAndAssert("", {
     denseJson: "",
-    binaryFormBase16: "f2",
+    bytesAsBase16: "f2",
   });
   tester.reserializeAndAssert("Foôbar", {
     denseJson: "Foôbar",
-    binaryFormBase16: "f307466fc3b4626172",
+    bytesAsBase16: "f307466fc3b4626172",
   });
   tester.reserializeAndAssert('Foo\n"bar"', {
     denseJson: 'Foo\n"bar"',
-    binaryFormBase16: "f309466f6f0a2262617222",
+    bytesAsBase16: "f309466f6f0a2262617222",
   });
   tester.reserializeAndAssert(
     "é".repeat(5000),
     {
       denseJson: "é".repeat(5000),
-      binaryFormBase16: `f3e81027${"c3a9".repeat(5000)}`,
+      bytesAsBase16: `f3e81027${"c3a9".repeat(5000)}`,
     },
     'reserialize "é".repeat(5000)',
   );
@@ -740,7 +654,7 @@ describe("string serializer", () => {
     "\uFFFF".repeat(5000),
     {
       denseJson: "\uFFFF".repeat(5000),
-      binaryFormBase16: `f3e8983a${"efbfbf".repeat(5000)}`,
+      bytesAsBase16: `f3e8983a${"efbfbf".repeat(5000)}`,
     },
     'reserialize "\\uFFFF".repeat(5000)',
   );
@@ -760,11 +674,11 @@ describe("bytes serializer", () => {
 
   tester.reserializeAndAssert(soia.ByteString.fromBase64("abc123"), {
     denseJson: "abc12w==",
-    binaryFormBase16: "f50469b735db",
+    bytesAsBase16: "f50469b735db",
   });
   tester.reserializeAndAssert(soia.ByteString.EMPTY, {
     denseJson: "",
-    binaryFormBase16: "f4",
+    bytesAsBase16: "f4",
   });
   tester.deserializeZeroAndAssert((s) => s.byteLength === 0);
 });
@@ -787,11 +701,11 @@ describe("nullable serializer", () => {
 
   tester.reserializeAndAssert(2, {
     denseJson: 2,
-    binaryFormBase16: "02",
+    bytesAsBase16: "02",
   });
   tester.reserializeAndAssert(null, {
     denseJson: null,
-    binaryFormBase16: "ff",
+    bytesAsBase16: "ff",
   });
   tester.deserializeZeroAndAssert((i) => i === 0);
 });
@@ -810,22 +724,22 @@ describe("array serializer", () => {
 
   tester.reserializeAndAssert([], {
     denseJson: [],
-    binaryFormBase16: "f6",
+    bytesAsBase16: "f6",
   });
 
   tester.reserializeAndAssert([10], {
     denseJson: [10],
-    binaryFormBase16: "f70a",
+    bytesAsBase16: "f70a",
   });
 
   tester.reserializeAndAssert([10, 11], {
     denseJson: [10, 11],
-    binaryFormBase16: "f80a0b",
+    bytesAsBase16: "f80a0b",
   });
 
   tester.reserializeAndAssert([10, 11, 12], {
     denseJson: [10, 11, 12],
-    binaryFormBase16: "f9030a0b0c",
+    bytesAsBase16: "f9030a0b0c",
   });
 
   tester.deserializeZeroAndAssert((a) => a.length === 0);
@@ -838,12 +752,12 @@ describe("string array serializer", () => {
 
   tester.reserializeAndAssert([], {
     denseJson: [],
-    binaryFormBase16: "f6",
+    bytesAsBase16: "f6",
   });
 
   tester.reserializeAndAssert(["foo", "bar"], {
     denseJson: ["foo", "bar"],
-    binaryFormBase16: "f8f303666f6ff303626172",
+    bytesAsBase16: "f8f303666f6ff303626172",
   });
 });
 
@@ -854,7 +768,7 @@ describe("bytes array serializer", () => {
 
   tester.reserializeAndAssert([], {
     denseJson: [],
-    binaryFormBase16: "f6",
+    bytesAsBase16: "f6",
   });
 
   const a = soia.ByteString.fromBase64("bGlnaHQgdw==");
@@ -862,6 +776,6 @@ describe("bytes array serializer", () => {
 
   tester.reserializeAndAssert([a, b], {
     denseJson: [a.toBase64(), b.toBase64()],
-    binaryFormBase16: "f8f5076c696768742077f5086c6967687420776f",
+    bytesAsBase16: "f8f5076c696768742077f5086c6967687420776f",
   });
 });

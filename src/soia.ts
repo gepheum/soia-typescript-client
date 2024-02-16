@@ -341,7 +341,7 @@ export interface Serializer<T> {
    */
   fromJson(json: Json): T;
   /** Converts back the given binary form to `T`. */
-  fromBinaryForm(bytes: ArrayBuffer): T;
+  fromBytes(bytes: ArrayBuffer): T;
   /**
    * Converts the given `T` to JSON and returns the stringified JSON. Same as
    * calling `JSON.stringify()` on the result of `toJson()`.
@@ -359,7 +359,7 @@ export interface Serializer<T> {
    */
   toJson(input: T | MutableForm<T>, flavor?: JsonFlavor): Json;
   /** Converts the given `T` to binary format. */
-  toBinaryForm(input: T | MutableForm<T>): BinaryForm;
+  toBytes(input: T | MutableForm<T>): BinaryForm;
   /** An object describing the type `T`. Enables reflective programming. */
   typeDescriptor: TypeDescriptorSpecialization<T>;
 }
@@ -427,8 +427,31 @@ export type TypeDescriptorSpecialization<T> = //
       ? EnumDescriptor<T>
       : TypeDescriptor<T>;
 
+interface TypeDescriptorBase {
+  /** Returns a JSON representation of this `TypeDescriptor`. */
+  asJson(): Json;
+
+  /**
+   * Converts from one serialized form to another.
+   *
+   * @example
+   * const denseJson = User.SERIALIZER.toJson(user, "dense");
+   * expect(
+   *   User.SERIALIZER.typeDescriptor.transform(denseJson, "readable")
+   * ).toMatch(
+   *   User.SERIALIZER.toJson(user, "readable")
+   * );
+   */
+  transform(json_or_bytes: Json | ArrayBuffer, out: JsonFlavor): Json;
+  transform(json: Json, out: "bytes"): ArrayBuffer;
+  transform(
+    json_or_bytes: Json | ArrayBuffer,
+    out: JsonFlavor | "bytes",
+  ): Json | ArrayBuffer;
+}
+
 /** Describes a primitive Soia type. */
-export interface PrimitiveDescriptor<T> {
+export interface PrimitiveDescriptor<T> extends TypeDescriptorBase {
   kind: "primitive";
   primitive: keyof PrimitiveTypes;
 }
@@ -453,14 +476,14 @@ export interface PrimitiveTypes {
  * Describes a nullable type. In a `.soia` file, a nullable type is represented
  * with a question mark at the end of another type.
  */
-export interface NullableDescriptor<T> {
+export interface NullableDescriptor<T> extends TypeDescriptorBase {
   readonly kind: "nullable";
   /** Describes the other (non-nullable) type. */
   readonly otherType: TypeDescriptor<NonNullable<T>>;
 }
 
 /** Describes an array type. */
-export interface ArrayDescriptor<T> {
+export interface ArrayDescriptor<T> extends TypeDescriptorBase {
   readonly kind: "array";
   /** Describes the type of the array items. */
   readonly itemType: TypeDescriptor<
@@ -472,7 +495,7 @@ export interface ArrayDescriptor<T> {
  * Describes a Soia struct.
  * The type parameter `T` refers to the generated frozen class for the struct.
  */
-export interface StructDescriptor<T = unknown> {
+export interface StructDescriptor<T = unknown> extends TypeDescriptorBase {
   readonly kind: "struct";
   /** Name of the struct as specified in the `.soia` file. */
   readonly name: string;
@@ -556,7 +579,7 @@ export type StructFieldResult<Struct, Key extends string | number> =
       : undefined);
 
 /** Describes a Soia enum. */
-export interface EnumDescriptor<T = unknown> {
+export interface EnumDescriptor<T = unknown> extends TypeDescriptorBase {
   readonly kind: "enum";
   /** Name of the enum as specified in the `.soia` file. */
   readonly name: string;
@@ -732,11 +755,64 @@ export type WholeOrPartial<
 // Implementation of serializers and type descriptors
 // =============================================================================
 
-interface InternalSerializer<T> extends Serializer<T> {
+/** JSON representation of a `TypeDescriptor`. */
+type TypeDefinition = {
+  readonly type: TypeSignature;
+  readonly records: readonly RecordDefinition[];
+};
+
+/** A type in the JSON representation of a `TypeDescriptor`. */
+type TypeSignature =
+  | {
+      kind: "nullable";
+      other: TypeSignature;
+    }
+  | {
+      kind: "array";
+      item: TypeSignature;
+    }
+  | {
+      kind: "record";
+      name: string;
+      module: string;
+    }
+  | {
+      kind: "primitive";
+      primitive: keyof PrimitiveTypes;
+    };
+
+/** Definition of a record in the JSON representation of a `TypeDescriptor`. */
+type RecordDefinition =
+  | {
+      readonly kind: "struct";
+      readonly name: string;
+      readonly module: string;
+      readonly fields: ReadonlyArray<{
+        name: string;
+        type: TypeSignature;
+        number: number;
+      }>;
+      readonly removed: ReadonlyArray<number>;
+    }
+  | {
+      readonly kind: "enum";
+      readonly name: string;
+      readonly module: string;
+      readonly fields: ReadonlyArray<{
+        name: string;
+        type?: TypeSignature;
+        number: number;
+      }>;
+      readonly removed: ReadonlyArray<number>;
+    };
+
+interface InternalSerializer<T = unknown> extends Serializer<T> {
   readonly defaultValue: T;
   isDefault(input: T): boolean;
   decode(stream: InputStream): T;
   encode(input: T, stream: OutputStream): void;
+  readonly typeSignature: TypeSignature;
+  addRecordDefinitionsTo(out: { [k: string]: RecordDefinition }): void;
 }
 
 /** Parameter of the {@link InternalSerializer.decode} method. */
@@ -934,7 +1010,7 @@ abstract class AbstractSerializer<T> implements InternalSerializer<T> {
     return this.fromJson(JSON.parse(code));
   }
 
-  fromBinaryForm(bytes: ArrayBuffer): T {
+  fromBytes(bytes: ArrayBuffer): T {
     return this.decode(new InputStream(new DataView(bytes)));
   }
 
@@ -943,7 +1019,7 @@ abstract class AbstractSerializer<T> implements InternalSerializer<T> {
     return JSON.stringify(this.toJson(input, flavor), undefined, indent);
   }
 
-  toBinaryForm(input: T): BinaryForm {
+  toBytes(input: T): BinaryForm {
     const stream = new OutputStream();
     this.encode(input, stream);
     return stream.finalize();
@@ -958,11 +1034,148 @@ abstract class AbstractSerializer<T> implements InternalSerializer<T> {
     return this as unknown as TypeDescriptorSpecialization<T>;
   }
 
+  abstract readonly defaultValue: T;
   abstract fromJson(json: Json): T;
   abstract toJson(input: T, flavor?: JsonFlavor): Json;
   abstract decode(stream: InputStream): T;
   abstract encode(input: T, stream: OutputStream): void;
-  abstract readonly defaultValue: T;
+
+  abstract readonly typeSignature: TypeSignature;
+  abstract addRecordDefinitionsTo(out: { [k: string]: RecordDefinition }): void;
+
+  asJson(): Json {
+    const recordDefinitions: { [k: string]: RecordDefinition } = {};
+    this.addRecordDefinitionsTo(recordDefinitions);
+    const result: TypeDefinition = {
+      type: this.typeSignature,
+      records: Object.values(recordDefinitions),
+    };
+    return result;
+  }
+
+  transform(json_or_bytes: Json | ArrayBuffer, out: JsonFlavor): Json;
+  transform(json: Json, out: "bytes"): ArrayBuffer;
+  transform(
+    json_or_bytes: Json | ArrayBuffer,
+    out: JsonFlavor | "bytes",
+  ): Json | ArrayBuffer {
+    const decoded: T =
+      json_or_bytes instanceof ArrayBuffer
+        ? this.fromBytes(json_or_bytes)
+        : this.fromJson(json_or_bytes);
+    return out === "bytes"
+      ? this.toBytes(decoded).toBuffer()
+      : this.toJson(decoded, out);
+  }
+}
+
+/**
+ * Returns a `TypeDescriptor` from its JSON representation as returned by
+ * `asJson()`.
+ */
+export function parseTypeDescriptor(json: Json): TypeDescriptor {
+  const typeDefinition = json as TypeDefinition;
+
+  type RecordBundle = {
+    readonly definition: RecordDefinition;
+    readonly defaultValue: Json;
+    readonly serializer: StructSerializerImpl<Json> | EnumSerializerImpl<Json>;
+  };
+  const recordBundles: { [k: string]: RecordBundle } = {};
+
+  // First loop: create the serializer for each record.
+  // It's not yet initialized.
+  for (const record of typeDefinition.records) {
+    const recordKey = `${record.module}:${record.name}`;
+    let defaultValue: Json;
+    let serializer: StructSerializerImpl<Json> | EnumSerializerImpl<Json>;
+    switch (record.kind) {
+      case "struct":
+        defaultValue = {};
+        serializer = new StructSerializerImpl<Json>(
+          defaultValue,
+          (copyable: AnyRecord) => Object.freeze({ ...copyable }) as Json,
+          (() => ({})) as NewMutableFn<Json>,
+        );
+        break;
+      case "enum":
+        defaultValue = "?";
+        serializer = new EnumSerializerImpl<Json>(
+          defaultValue,
+          (name: string, value: unknown) =>
+            value !== undefined
+              ? Object.freeze({ kind: name, value: value as Json })
+              : name,
+        );
+        break;
+    }
+    const recordBundle: RecordBundle = {
+      definition: record,
+      defaultValue: defaultValue,
+      serializer: serializer,
+    };
+    recordBundles[recordKey] = recordBundle;
+  }
+
+  function parse(ts: TypeSignature): InternalSerializer {
+    switch (ts.kind) {
+      case "array":
+        return new ArraySerializerImpl(parse(ts.item));
+      case "nullable":
+        return new NullableSerializerImpl(parse(ts.other));
+      case "primitive":
+        return primitiveSerializer(ts.primitive) as InternalSerializer;
+      case "record":
+        const recordKey = `${ts.module}:${ts.name}`;
+        return recordBundles[recordKey]!.serializer;
+    }
+  }
+
+  // Second loop: initialize each serializer.
+  for (const recordBundle of Object.values(recordBundles)) {
+    const { definition, defaultValue, serializer } = recordBundle;
+    const { module, removed } = definition;
+    const qualifiedName = definition.name;
+    const nameParts = qualifiedName.split(".");
+    const name = nameParts[nameParts.length - 1]!;
+    const parentType =
+      recordBundles[nameParts.slice(0, -1).join(".")]?.serializer;
+    switch (definition.kind) {
+      case "struct":
+        const fields: Array<[string, string, number, InternalSerializer]> = [];
+        for (const f of definition.fields) {
+          const fieldSerializer = parse(f.type);
+          fields.push([f.name, f.name, f.number, fieldSerializer]);
+          (defaultValue as AnyRecord)[f.name] = fieldSerializer.defaultValue;
+        }
+        (serializer as StructSerializerImpl<Json>).init(
+          name,
+          qualifiedName,
+          module,
+          parentType,
+          fields,
+          removed,
+        );
+        Object.freeze(defaultValue);
+        break;
+      case "enum":
+        (serializer as EnumSerializerImpl<Json>).init(
+          name,
+          qualifiedName,
+          module,
+          parentType,
+          definition.fields.map((f) => [
+            f.name,
+            f.number,
+            f.type ? parse(f.type) : f.name,
+          ]),
+          removed,
+        );
+        break;
+    }
+  }
+
+  return parse(typeDefinition.type).typeDescriptor;
 }
 
 abstract class AbstractPrimitiveSerializer<P extends keyof PrimitiveTypes>
@@ -970,6 +1183,16 @@ abstract class AbstractPrimitiveSerializer<P extends keyof PrimitiveTypes>
   implements PrimitiveDescriptor<PrimitiveTypes[P]>
 {
   readonly kind = "primitive";
+
+  get typeSignature(): TypeSignature {
+    return {
+      kind: "primitive",
+      primitive: this.primitive,
+    };
+  }
+
+  addRecordDefinitionsTo(out: { [k: string]: RecordDefinition }) {}
+
   abstract readonly primitive: P;
 }
 
@@ -1355,7 +1578,7 @@ type EnumFieldImpl<Enum> =
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 
-class ArraySerializerImpl<Item> //
+class ArraySerializerImpl<Item>
   extends AbstractSerializer<readonly Item[]>
   implements ArrayDescriptor<readonly Item[]>
 {
@@ -1414,9 +1637,20 @@ class ArraySerializerImpl<Item> //
   get itemType(): TypeDescriptor<Item> {
     return this.itemSerializer.typeDescriptor;
   }
+
+  get typeSignature(): TypeSignature {
+    return {
+      kind: "array",
+      item: this.itemSerializer.typeSignature,
+    };
+  }
+
+  addRecordDefinitionsTo(out: { [k: string]: RecordDefinition }) {
+    this.itemSerializer.addRecordDefinitionsTo(out);
+  }
 }
 
-class NullableSerializerImpl<Other> //
+class NullableSerializerImpl<Other>
   extends AbstractSerializer<Other | null>
   implements NullableDescriptor<Other | null>
 {
@@ -1462,6 +1696,17 @@ class NullableSerializerImpl<Other> //
       NonNullable<Other>
     >;
   }
+
+  get typeSignature(): TypeSignature {
+    return {
+      kind: "nullable",
+      other: this.otherSerializer.typeSignature,
+    };
+  }
+
+  addRecordDefinitionsTo(out: { [k: string]: RecordDefinition }) {
+    this.otherSerializer.addRecordDefinitionsTo(out);
+  }
 }
 
 const PRIMITIVE_SERIALIZERS: {
@@ -1478,8 +1723,9 @@ const PRIMITIVE_SERIALIZERS: {
   bytes: new ByteStringSerializer(),
 };
 
-type MutableConstructor<Frozen> = //
-  new (copyable?: Frozen | MutableForm<Frozen>) => MutableForm<Frozen>;
+type NewMutableFn<Frozen> = (
+  copyable?: Frozen | MutableForm<Frozen>,
+) => MutableForm<Frozen>;
 
 function decodeUnused(stream: InputStream): void {
   const wire = stream.readUint8();
@@ -1535,18 +1781,26 @@ class StructSerializerImpl<T>
   extends AbstractSerializer<T>
   implements StructDescriptor<T>
 {
-  constructor(frozenClass: AnyRecord) {
+  static create<T>(frozenClass: AnyRecord): StructSerializerImpl<T> {
+    const mutableCtor = frozenClass.Mutable as new (
+      copyable?: T | MutableForm<T>,
+    ) => MutableForm<T>;
+    return new StructSerializerImpl(
+      frozenClass.DEFAULT as T,
+      frozenClass.create as (copyable: AnyRecord) => T,
+      () => new mutableCtor(),
+    );
+  }
+
+  constructor(
+    readonly defaultValue: T,
+    readonly createFn: (copyable: AnyRecord) => T,
+    readonly newMutableFn: NewMutableFn<T>,
+  ) {
     super();
-    this.defaultValue = frozenClass.DEFAULT as T;
-    this.createFn = frozenClass.create as (copyable: unknown) => T;
-    this.mutableConstructor = frozenClass.Mutable as MutableConstructor<T>;
   }
 
   readonly kind = "struct";
-  readonly defaultValue: T;
-  readonly createFn: (copyable: unknown) => T;
-  readonly mutableConstructor: MutableConstructor<T>;
-
   name = "";
   qualifiedName = "";
   modulePath = "";
@@ -1694,12 +1948,42 @@ class StructSerializerImpl<T>
     return true;
   }
 
+  get typeSignature(): TypeSignature {
+    return {
+      kind: "record",
+      name: this.qualifiedName,
+      module: this.modulePath,
+    };
+  }
+
+  addRecordDefinitionsTo(out: { [k: string]: RecordDefinition }): void {
+    const recordKey = `${this.modulePath}:${this.qualifiedName}`;
+    if (!out[recordKey]) {
+      return;
+    }
+    const structDefinition: RecordDefinition = {
+      kind: "struct",
+      name: this.qualifiedName,
+      module: this.modulePath,
+      fields: this.fields.map((f) => ({
+        name: f.name,
+        type: f.serializer.typeSignature,
+        number: f.number,
+      })),
+      removed: this.removedNumbers,
+    };
+    out[recordKey] = structDefinition;
+    for (const f of this.fields) {
+      f.serializer.addRecordDefinitionsTo(out);
+    }
+  }
+
   getField<K extends string | number>(key: K): StructFieldResult<T, K> {
     return this.fieldMapping[key]!;
   }
 
   newMutable(copyable?: T | MutableForm<T>): MutableForm<T> {
-    return new this.mutableConstructor(copyable);
+    return this.newMutableFn(copyable);
   }
 
   init(
@@ -1715,7 +1999,7 @@ class StructSerializerImpl<T>
     this.modulePath = modulePath;
     this.parentType = parentType;
     for (const f of fields) {
-      const serializer = f[3] as InternalSerializer<unknown>;
+      const serializer = f[3] as InternalSerializer;
       const field = new StructFieldImpl<T>(f[0], f[1], f[2], serializer);
       this.fields.push(field);
       this.slots[field.number] = field;
@@ -1770,16 +2054,21 @@ class EnumSerializerImpl<T>
   extends AbstractSerializer<T>
   implements EnumDescriptor<T>
 {
-  constructor(enumClass: AnyRecord) {
+  static create<T>(enumClass: AnyRecord): EnumSerializerImpl<T> {
+    return new EnumSerializerImpl<T>(
+      enumClass["?"] as T,
+      enumClass.create as (k: string, v: unknown) => T,
+    );
+  }
+
+  constructor(
+    readonly defaultValue: T,
+    private readonly createFn?: (k: string, v: unknown) => T,
+  ) {
     super();
-    this.defaultValue = enumClass["?"] as T;
-    this.createFn = enumClass.create as (k: string, v: unknown) => T;
   }
 
   readonly kind = "enum";
-  readonly defaultValue: T;
-  private readonly createFn?: (k: string, v: unknown) => T;
-
   name = "";
   qualifiedName = "";
   modulePath = "";
@@ -1903,6 +2192,38 @@ class EnumSerializerImpl<T>
         return field.wrap(field.serializer.decode(stream));
       } else {
         return field.constant;
+      }
+    }
+  }
+
+  get typeSignature(): TypeSignature {
+    return {
+      kind: "record",
+      name: this.qualifiedName,
+      module: this.modulePath,
+    };
+  }
+
+  addRecordDefinitionsTo(out: { [k: string]: RecordDefinition }): void {
+    const recordKey = `${this.modulePath}:${this.qualifiedName}`;
+    if (!out[recordKey]) {
+      return;
+    }
+    const enumDefinition: RecordDefinition = {
+      kind: "enum",
+      name: this.qualifiedName,
+      module: this.modulePath,
+      fields: this.fields.map((f) => ({
+        name: f.name,
+        type: f?.serializer?.typeSignature,
+        number: f.number,
+      })),
+      removed: this.removedNumbers,
+    };
+    out[recordKey] = enumDefinition;
+    for (const f of this.fields) {
+      if (f.serializer) {
+        f.serializer.addRecordDefinitionsTo(out);
       }
     }
   }
@@ -2118,14 +2439,14 @@ export function _newStructSerializer<T extends _FrozenBase>(
   defaultValue: T,
 ): Serializer<T> {
   const clazz: AnyRecord = Object.getPrototypeOf(defaultValue).constructor;
-  return new StructSerializerImpl<T>(clazz);
+  return StructSerializerImpl.create<T>(clazz);
 }
 
 export function _newEnumSerializer<T extends _EnumBase>(
   defaultValue: T,
 ): Serializer<T> {
   const clazz: AnyRecord = Object.getPrototypeOf(defaultValue).constructor;
-  return new EnumSerializerImpl<T>(clazz);
+  return EnumSerializerImpl.create<T>(clazz);
 }
 
 export function _initStructSerializer<T extends _FrozenBase>(
