@@ -102,6 +102,7 @@ describe("timestamp serializer", () => {
       },
       records: [],
     });
+    tester.reserializeTypeAdapterAndAssertNoLoss();
   });
 
   tester.reserializeAndAssert(
@@ -320,6 +321,7 @@ describe("bool serializer", () => {
       },
       records: [],
     });
+    tester.reserializeTypeAdapterAndAssertNoLoss();
   });
 
   tester.reserializeAndAssert(true, {
@@ -352,6 +354,7 @@ describe("int32 serializer", () => {
       },
       records: [],
     });
+    tester.reserializeTypeAdapterAndAssertNoLoss();
   });
 
   tester.reserializeAndAssert(2, {
@@ -479,6 +482,7 @@ describe("int64 serializer", () => {
       },
       records: [],
     });
+    tester.reserializeTypeAdapterAndAssertNoLoss();
   });
 
   tester.reserializeAndAssert(BigInt("888888888888"), {
@@ -530,6 +534,7 @@ describe("uint64 serializer", () => {
       },
       records: [],
     });
+    tester.reserializeTypeAdapterAndAssertNoLoss();
   });
 
   tester.reserializeAndAssert(BigInt("888888888888"), {
@@ -581,6 +586,7 @@ describe("float32 serializer", () => {
       },
       records: [],
     });
+    tester.reserializeTypeAdapterAndAssertNoLoss();
   });
 
   tester.reserializeAndAssert(2, {
@@ -648,6 +654,7 @@ describe("float64 serializer", () => {
       },
       records: [],
     });
+    tester.reserializeTypeAdapterAndAssertNoLoss();
   });
 
   tester.reserializeAndAssert(2, {
@@ -707,6 +714,7 @@ describe("string serializer", () => {
       },
       records: [],
     });
+    tester.reserializeTypeAdapterAndAssertNoLoss();
   });
 
   tester.reserializeAndAssert("", {
@@ -760,6 +768,7 @@ describe("bytes serializer", () => {
       },
       records: [],
     });
+    tester.reserializeTypeAdapterAndAssertNoLoss();
   });
 
   tester.reserializeAndAssert(soia.ByteString.fromBase64("abc123"), {
@@ -800,6 +809,7 @@ describe("nullable serializer", () => {
       },
       records: [],
     });
+    tester.reserializeTypeAdapterAndAssertNoLoss();
   });
 
   tester.reserializeAndAssert(2, {
@@ -836,6 +846,7 @@ describe("array serializer", () => {
       },
       records: [],
     });
+    tester.reserializeTypeAdapterAndAssertNoLoss();
   });
 
   tester.reserializeAndAssert([], {

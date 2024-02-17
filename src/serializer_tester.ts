@@ -146,6 +146,15 @@ export class SerializerTester<T> {
       });
     });
   }
+
+  reserializeTypeAdapterAndAssertNoLoss(): void {
+    it("reserialize type adapter", () => {
+      const json = this.serializer.typeDescriptor.asJson();
+      const reserialized = parseTypeDescriptor(json);
+      expect(reserialized.asJson()).toMatch(json);
+      expect(json).toMatch(reserialized.asJson());
+    });
+  }
 }
 
 function toBase16(buffer: ArrayBuffer): string {

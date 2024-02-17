@@ -781,30 +781,24 @@ type TypeSignature =
       primitive: keyof PrimitiveTypes;
     };
 
+/**
+ * Definition of a record field in the JSON representation of a
+ * `TypeDescriptor`.
+ */
+type FieldDefinition = {
+  name: string;
+  type?: TypeSignature;
+  number: number;
+};
+
 /** Definition of a record in the JSON representation of a `TypeDescriptor`. */
-type RecordDefinition =
-  | {
-      kind: "struct";
-      name: string;
-      module: string;
-      fields: ReadonlyArray<{
-        name: string;
-        type: TypeSignature;
-        number: number;
-      }>;
-      removed?: ReadonlyArray<number>;
-    }
-  | {
-      kind: "enum";
-      name: string;
-      module: string;
-      fields: ReadonlyArray<{
-        name: string;
-        type?: TypeSignature;
-        number: number;
-      }>;
-      removed?: ReadonlyArray<number>;
-    };
+type RecordDefinition = {
+  kind: "struct" | "enum";
+  name: string;
+  module: string;
+  fields: readonly FieldDefinition[];
+  removed?: ReadonlyArray<number>;
+};
 
 interface InternalSerializer<T = unknown> extends Serializer<T> {
   readonly defaultValue: T;
@@ -1099,13 +1093,11 @@ export function parseTypeDescriptor(json: Json): TypeDescriptor {
         );
         break;
       case "enum":
-        defaultValue = "?";
+        defaultValue = Object.freeze({ kind: "?" });
         serializer = new EnumSerializerImpl<Json>(
           defaultValue,
           (name: string, value: unknown) =>
-            value !== undefined
-              ? Object.freeze({ kind: name, value: value as Json })
-              : name,
+            Object.freeze({ kind: name, value: value as Json }),
         );
         break;
     }
@@ -1144,7 +1136,7 @@ export function parseTypeDescriptor(json: Json): TypeDescriptor {
       case "struct":
         const fields: Array<[string, string, number, InternalSerializer]> = [];
         for (const f of definition.fields) {
-          const fieldSerializer = parse(f.type);
+          const fieldSerializer = parse(f.type!);
           fields.push([f.name, f.name, f.number, fieldSerializer]);
           (defaultValue as AnyRecord)[f.name] = fieldSerializer.defaultValue;
         }
@@ -1167,7 +1159,7 @@ export function parseTypeDescriptor(json: Json): TypeDescriptor {
           definition.fields.map((f) => [
             f.name,
             f.number,
-            f.type ? parse(f.type) : f.name,
+            f.type ? parse(f.type) : Object.freeze({ kind: f.name }),
           ]),
           removed || [],
         );
@@ -1692,7 +1684,6 @@ class NullableSerializerImpl<Other>
 
   get otherType(): TypeDescriptor<NonNullable<Other>> {
     return this.otherSerializer.typeDescriptor as TypeDescriptor<
-      //
       NonNullable<Other>
     >;
   }
@@ -1777,8 +1768,61 @@ function decodeUnused(stream: InputStream): void {
   }
 }
 
+abstract class AbstractRecordSerializer<T, F> extends AbstractSerializer<T> {
+  abstract kind: "struct" | "enum";
+  name = "";
+  qualifiedName = "";
+  modulePath = "";
+  parentType: StructDescriptor | EnumDescriptor | undefined;
+  removedNumbers: readonly number[] = [];
+  initialized?: true;
+
+  init(
+    name: string,
+    qualifiedName: string,
+    modulePath: string,
+    parentType: StructDescriptor | EnumDescriptor | undefined,
+    fields: readonly F[],
+    removedNumbers: readonly number[],
+  ) {
+    this.name = name;
+    this.qualifiedName = qualifiedName;
+    this.modulePath = modulePath;
+    this.parentType = parentType;
+    this.registerFields(fields);
+    this.removedNumbers = removedNumbers;
+    this.initialized = true;
+    freezeDeeply(this);
+  }
+
+  abstract registerFields(fields: readonly F[]): void;
+
+  addRecordDefinitionsTo(out: { [k: string]: RecordDefinition }): void {
+    const recordKey = `${this.modulePath}:${this.qualifiedName}`;
+    if (out[recordKey]) {
+      return;
+    }
+    const structDefinition: RecordDefinition = {
+      kind: this.kind,
+      name: this.qualifiedName,
+      module: this.modulePath,
+      fields: this.fieldDefinitions(),
+    };
+    if (this.removedNumbers.length) {
+      structDefinition.removed = this.removedNumbers;
+    }
+    out[recordKey] = structDefinition;
+    for (const dependency of this.dependencies()) {
+      dependency.addRecordDefinitionsTo(out);
+    }
+  }
+
+  abstract fieldDefinitions(): FieldDefinition[];
+  abstract dependencies(): InternalSerializer[];
+}
+
 class StructSerializerImpl<T>
-  extends AbstractSerializer<T>
+  extends AbstractRecordSerializer<T, _StructFieldInput>
   implements StructDescriptor<T>
 {
   static create<T>(frozenClass: AnyRecord): StructSerializerImpl<T> {
@@ -1801,10 +1845,6 @@ class StructSerializerImpl<T>
   }
 
   readonly kind = "struct";
-  name = "";
-  qualifiedName = "";
-  modulePath = "";
-  parentType: StructDescriptor | EnumDescriptor | undefined;
   // Fields in the order they appear in the `.soia` file.
   readonly fields: Array<StructFieldImpl<T>> = [];
   readonly fieldMapping: { [key: string | number]: StructFieldImpl<T> } = {};
@@ -1814,7 +1854,6 @@ class StructSerializerImpl<T>
   // The `undefined` slots correspond to removed fields.
   private readonly slots: Array<StructFieldImpl<T> | undefined> = [];
   private readonly copyableTemplate: Record<string, unknown> = {};
-  initialized?: true;
 
   toJson(input: T, flavor?: JsonFlavor): Json {
     if (input === this.defaultValue) {
@@ -1956,30 +1995,6 @@ class StructSerializerImpl<T>
     };
   }
 
-  addRecordDefinitionsTo(out: { [k: string]: RecordDefinition }): void {
-    const recordKey = `${this.modulePath}:${this.qualifiedName}`;
-    if (out[recordKey]) {
-      return;
-    }
-    const structDefinition: RecordDefinition = {
-      kind: "struct",
-      name: this.qualifiedName,
-      module: this.modulePath,
-      fields: this.fields.map((f) => ({
-        name: f.name,
-        type: f.serializer.typeSignature,
-        number: f.number,
-      })),
-    };
-    if (this.removedNumbers.length) {
-      structDefinition.removed = this.removedNumbers;
-    }
-    out[recordKey] = structDefinition;
-    for (const f of this.fields) {
-      f.serializer.addRecordDefinitionsTo(out);
-    }
-  }
-
   getField<K extends string | number>(key: K): StructFieldResult<T, K> {
     return this.fieldMapping[key]!;
   }
@@ -1988,18 +2003,7 @@ class StructSerializerImpl<T>
     return this.newMutableFn(copyable);
   }
 
-  init(
-    name: string,
-    qualifiedName: string,
-    modulePath: string,
-    parentType: StructDescriptor | EnumDescriptor | undefined,
-    fields: ReadonlyArray<[string, string, number, Serializer<unknown>]>,
-    removedNumbers: readonly number[],
-  ) {
-    this.name = name;
-    this.qualifiedName = qualifiedName;
-    this.modulePath = modulePath;
-    this.parentType = parentType;
+  registerFields(fields: readonly _StructFieldInput[]) {
     for (const f of fields) {
       const serializer = f[3] as InternalSerializer;
       const field = new StructFieldImpl<T>(f[0], f[1], f[2], serializer);
@@ -2013,9 +2017,18 @@ class StructSerializerImpl<T>
       ];
     }
     this.reversedFields = [...this.fields].sort((a, b) => b.number - a.number);
-    this.removedNumbers = removedNumbers;
-    this.initialized = true;
-    freezeDeeply(this);
+  }
+
+  fieldDefinitions(): FieldDefinition[] {
+    return this.fields.map((f) => ({
+      name: f.name,
+      type: f.serializer.typeSignature,
+      number: f.number,
+    }));
+  }
+
+  dependencies(): InternalSerializer[] {
+    return this.fields.map((f) => f.serializer);
   }
 }
 
@@ -2053,7 +2066,7 @@ class EnumValueFieldImpl<Enum, Value = unknown> {
 }
 
 class EnumSerializerImpl<T>
-  extends AbstractSerializer<T>
+  extends AbstractRecordSerializer<T, _EnumFieldInput<T>>
   implements EnumDescriptor<T>
 {
   static create<T>(enumClass: AnyRecord): EnumSerializerImpl<T> {
@@ -2071,15 +2084,9 @@ class EnumSerializerImpl<T>
   }
 
   readonly kind = "enum";
-  name = "";
-  qualifiedName = "";
-  modulePath = "";
-  parentType: StructDescriptor | EnumDescriptor | undefined;
   readonly fields: EnumFieldImpl<T>[] = [];
-  readonly removedNumbers: number[] = [];
   private readonly fieldMapping: { [key: string | number]: EnumFieldImpl<T> } =
     {};
-  initialized?: true;
 
   toJson(input: T, flavor?: JsonFlavor): Json {
     const kind = (input as AnyRecord).kind as string;
@@ -2113,11 +2120,7 @@ class EnumSerializerImpl<T>
         // Unrecognized field.
         return this.defaultValue;
       }
-      if (field.serializer) {
-        return field.wrappedDefault;
-      } else {
-        return field.constant;
-      }
+      return field.serializer ? field.wrappedDefault : field.constant;
     }
     let fieldKey: number | string;
     let valueAsJson: Json;
@@ -2206,78 +2209,55 @@ class EnumSerializerImpl<T>
     };
   }
 
-  addRecordDefinitionsTo(out: { [k: string]: RecordDefinition }): void {
-    const recordKey = `${this.modulePath}:${this.qualifiedName}`;
-    if (out[recordKey]) {
-      return;
-    }
-    const enumDefinition: RecordDefinition = {
-      kind: "enum",
-      name: this.qualifiedName,
-      module: this.modulePath,
-      fields: this.fields.map((f) => {
-        const result = {
-          name: f.name,
-          number: f.number,
-        };
-        const type = f?.serializer?.typeSignature;
-        return type ? { ...result, type: type } : result;
-      }),
-    };
-    if (this.removedNumbers.length) {
-      enumDefinition.removed = this.removedNumbers;
-    }
-    out[recordKey] = enumDefinition;
-    for (const f of this.fields) {
-      if (f.serializer) {
-        f.serializer.addRecordDefinitionsTo(out);
-      }
-    }
-  }
-
   isDefault(input: T): boolean {
-    return input === this.defaultValue;
+    type Kinded = { kind: string };
+    return (input as Kinded).kind === "?";
   }
 
   getField<K extends string | number>(key: K): EnumFieldResult<T, K> {
     return this.fieldMapping[key]!;
   }
 
-  init(
-    name: string,
-    qualifiedName: string,
-    modulePath: string,
-    parentType: StructDescriptor | EnumDescriptor | undefined,
-    fields: ReadonlyArray<[string, number, T | Serializer<unknown>]>,
-    removedNumbers: readonly number[],
-  ) {
-    this.name = name;
-    this.qualifiedName = qualifiedName;
-    this.modulePath = modulePath;
-    this.parentType = parentType;
+  registerFields(fields: readonly _EnumFieldInput<T>[]): void {
     for (const f of fields) {
       let field: EnumFieldImpl<T>;
       const constantOrSerializer = f[2];
-      if (
-        constantOrSerializer instanceof _EnumBase ||
-        typeof constantOrSerializer === "string"
-      ) {
+      if (constantOrSerializer instanceof AbstractSerializer) {
+        const serializer =
+          constantOrSerializer as InternalSerializer as InternalSerializer<T>;
+        field = new EnumValueFieldImpl(f[0], f[1], serializer, this.createFn!);
+      } else {
         field = {
           name: f[0],
           number: f[1],
           constant: constantOrSerializer as T,
         };
-      } else {
-        const serializer = constantOrSerializer as InternalSerializer<T>;
-        field = new EnumValueFieldImpl(f[0], f[1], serializer, this.createFn!);
       }
       this.fields.push(field);
       this.fieldMapping[field.name] = field;
       this.fieldMapping[field.number] = field;
     }
-    this.removedNumbers.push(...removedNumbers);
-    this.initialized = true;
-    freezeDeeply(this);
+  }
+
+  fieldDefinitions(): FieldDefinition[] {
+    return this.fields.map((f) => {
+      const result = {
+        name: f.name,
+        number: f.number,
+      };
+      const type = f?.serializer?.typeSignature;
+      return type ? { ...result, type: type } : result;
+    });
+  }
+
+  dependencies(): InternalSerializer[] {
+    const result: InternalSerializer[] = [];
+    for (const f of this.fields) {
+      if (f.serializer) {
+        result.push(f.serializer);
+      }
+    }
+    return result;
   }
 }
 
@@ -2459,13 +2439,15 @@ export function _newEnumSerializer<T extends _EnumBase>(
   return EnumSerializerImpl.create<T>(clazz);
 }
 
+export type _StructFieldInput = [string, string, number, Serializer<unknown>];
+
 export function _initStructSerializer<T extends _FrozenBase>(
   serializer: Serializer<T>,
   name: string,
   qualifiedName: string,
   modulePath: string,
   parentType: StructDescriptor | EnumDescriptor | undefined,
-  fields: ReadonlyArray<[string, string, number, Serializer<unknown>]>,
+  fields: readonly _StructFieldInput[],
   removedNumbers: readonly number[],
 ) {
   (serializer as StructSerializerImpl<T>).init(
@@ -2478,13 +2460,15 @@ export function _initStructSerializer<T extends _FrozenBase>(
   );
 }
 
+export type _EnumFieldInput<T> = [string, number, T | Serializer<unknown>];
+
 export function _initEnumSerializer<T extends _EnumBase>(
   serializer: Serializer<T>,
   name: string,
   qualifiedName: string,
   modulePath: string,
   parentType: StructDescriptor | EnumDescriptor | undefined,
-  fields: ReadonlyArray<[string, number, T | Serializer<unknown>]>,
+  fields: ReadonlyArray<_EnumFieldInput<T>>,
   removedNumbers: readonly number[],
 ) {
   (serializer as EnumSerializerImpl<T>).init(
