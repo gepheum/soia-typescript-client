@@ -2221,7 +2221,7 @@ class EnumSerializerImpl<T>
           number: f.number,
         };
         const type = f?.serializer?.typeSignature;
-        return type ? {...result, type: type} : result;
+        return type ? { ...result, type: type } : result;
       }),
     };
     if (this.removedNumbers.length) {
