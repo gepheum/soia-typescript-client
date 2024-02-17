@@ -2258,7 +2258,10 @@ class EnumSerializerImpl<T>
     for (const f of fields) {
       let field: EnumFieldImpl<T>;
       const constantOrSerializer = f[2];
-      if (constantOrSerializer instanceof _EnumBase) {
+      if (
+        constantOrSerializer instanceof _EnumBase ||
+        typeof constantOrSerializer === "string"
+      ) {
         field = {
           name: f[0],
           number: f[1],
