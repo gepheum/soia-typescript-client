@@ -94,6 +94,16 @@ describe("timestamp serializer", () => {
     });
   });
 
+  it("TypeDescript#asJson()", () => {
+    expect(serializer.typeDescriptor.asJson()).toMatch({
+      type: {
+        kind: "primitive",
+        primitive: "timestamp",
+      },
+      records: [],
+    });
+  });
+
   tester.reserializeAndAssert(
     soia.Timestamp.UNIX_EPOCH,
     {
@@ -302,6 +312,16 @@ describe("bool serializer", () => {
     });
   });
 
+  it("TypeDescript#asJson()", () => {
+    expect(serializer.typeDescriptor.asJson()).toMatch({
+      type: {
+        kind: "primitive",
+        primitive: "bool",
+      },
+      records: [],
+    });
+  });
+
   tester.reserializeAndAssert(true, {
     denseJson: true,
     bytesAsBase16: "01",
@@ -321,6 +341,16 @@ describe("int32 serializer", () => {
     expect(serializer.typeDescriptor).toMatch({
       kind: "primitive",
       primitive: "int32",
+    });
+  });
+
+  it("TypeDescript#asJson()", () => {
+    expect(serializer.typeDescriptor.asJson()).toMatch({
+      type: {
+        kind: "primitive",
+        primitive: "int32",
+      },
+      records: [],
     });
   });
 
@@ -441,6 +471,16 @@ describe("int64 serializer", () => {
     });
   });
 
+  it("TypeDescript#asJson()", () => {
+    expect(serializer.typeDescriptor.asJson()).toMatch({
+      type: {
+        kind: "primitive",
+        primitive: "int64",
+      },
+      records: [],
+    });
+  });
+
   tester.reserializeAndAssert(BigInt("888888888888"), {
     denseJson: "888888888888",
     bytesAsBase16: "ee380ee8f5ce000000",
@@ -482,6 +522,16 @@ describe("uint64 serializer", () => {
     });
   });
 
+  it("TypeDescript#asJson()", () => {
+    expect(serializer.typeDescriptor.asJson()).toMatch({
+      type: {
+        kind: "primitive",
+        primitive: "uint64",
+      },
+      records: [],
+    });
+  });
+
   tester.reserializeAndAssert(BigInt("888888888888"), {
     denseJson: "888888888888",
     bytesAsBase16: "ea380ee8f5ce000000",
@@ -520,6 +570,16 @@ describe("float32 serializer", () => {
     expect(serializer.typeDescriptor).toMatch({
       kind: "primitive",
       primitive: "float32",
+    });
+  });
+
+  it("TypeDescript#asJson()", () => {
+    expect(serializer.typeDescriptor.asJson()).toMatch({
+      type: {
+        kind: "primitive",
+        primitive: "float32",
+      },
+      records: [],
     });
   });
 
@@ -580,6 +640,16 @@ describe("float64 serializer", () => {
     });
   });
 
+  it("TypeDescript#asJson()", () => {
+    expect(serializer.typeDescriptor.asJson()).toMatch({
+      type: {
+        kind: "primitive",
+        primitive: "float64",
+      },
+      records: [],
+    });
+  });
+
   tester.reserializeAndAssert(2, {
     denseJson: 2,
     bytesAsBase16: "f10000000000000040",
@@ -629,6 +699,16 @@ describe("string serializer", () => {
     });
   });
 
+  it("TypeDescript#asJson()", () => {
+    expect(serializer.typeDescriptor.asJson()).toMatch({
+      type: {
+        kind: "primitive",
+        primitive: "string",
+      },
+      records: [],
+    });
+  });
+
   tester.reserializeAndAssert("", {
     denseJson: "",
     bytesAsBase16: "f2",
@@ -672,6 +752,16 @@ describe("bytes serializer", () => {
     });
   });
 
+  it("TypeDescript#asJson()", () => {
+    expect(serializer.typeDescriptor.asJson()).toMatch({
+      type: {
+        kind: "primitive",
+        primitive: "bytes",
+      },
+      records: [],
+    });
+  });
+
   tester.reserializeAndAssert(soia.ByteString.fromBase64("abc123"), {
     denseJson: "abc12w==",
     bytesAsBase16: "f50469b735db",
@@ -699,6 +789,19 @@ describe("nullable serializer", () => {
     });
   });
 
+  it("TypeDescript#asJson()", () => {
+    expect(serializer.typeDescriptor.asJson()).toMatch({
+      type: {
+        kind: "nullable",
+        other: {
+          kind: "primitive",
+          primitive: "int32",
+        },
+      },
+      records: [],
+    });
+  });
+
   tester.reserializeAndAssert(2, {
     denseJson: 2,
     bytesAsBase16: "02",
@@ -719,6 +822,19 @@ describe("array serializer", () => {
     expect(serializer.typeDescriptor).toMatch({
       kind: "array",
       itemType: itemSerializer.typeDescriptor,
+    });
+  });
+
+  it("TypeDescript#asJson()", () => {
+    expect(serializer.typeDescriptor.asJson()).toMatch({
+      type: {
+        kind: "array",
+        item: {
+          kind: "primitive",
+          primitive: "int32",
+        },
+      },
+      records: [],
     });
   });
 
