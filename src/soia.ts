@@ -757,8 +757,8 @@ export type WholeOrPartial<
 
 /** JSON representation of a `TypeDescriptor`. */
 type TypeDefinition = {
-  readonly type: TypeSignature;
-  readonly records: readonly RecordDefinition[];
+  type: TypeSignature;
+  records: readonly RecordDefinition[];
 };
 
 /** A type in the JSON representation of a `TypeDescriptor`. */
@@ -784,26 +784,26 @@ type TypeSignature =
 /** Definition of a record in the JSON representation of a `TypeDescriptor`. */
 type RecordDefinition =
   | {
-      readonly kind: "struct";
-      readonly name: string;
-      readonly module: string;
-      readonly fields: ReadonlyArray<{
+      kind: "struct";
+      name: string;
+      module: string;
+      fields: ReadonlyArray<{
         name: string;
         type: TypeSignature;
         number: number;
       }>;
-      readonly removed: ReadonlyArray<number>;
+      removed?: ReadonlyArray<number>;
     }
   | {
-      readonly kind: "enum";
-      readonly name: string;
-      readonly module: string;
-      readonly fields: ReadonlyArray<{
+      kind: "enum";
+      name: string;
+      module: string;
+      fields: ReadonlyArray<{
         name: string;
         type?: TypeSignature;
         number: number;
       }>;
-      readonly removed: ReadonlyArray<number>;
+      removed?: ReadonlyArray<number>;
     };
 
 interface InternalSerializer<T = unknown> extends Serializer<T> {
@@ -1154,7 +1154,7 @@ export function parseTypeDescriptor(json: Json): TypeDescriptor {
           module,
           parentType,
           fields,
-          removed,
+          removed || [],
         );
         Object.freeze(defaultValue);
         break;
@@ -1169,7 +1169,7 @@ export function parseTypeDescriptor(json: Json): TypeDescriptor {
             f.number,
             f.type ? parse(f.type) : f.name,
           ]),
-          removed,
+          removed || [],
         );
         break;
     }
@@ -1970,8 +1970,10 @@ class StructSerializerImpl<T>
         type: f.serializer.typeSignature,
         number: f.number,
       })),
-      removed: this.removedNumbers,
     };
+    if (this.removedNumbers.length) {
+      structDefinition.removed = this.removedNumbers;
+    }
     out[recordKey] = structDefinition;
     for (const f of this.fields) {
       f.serializer.addRecordDefinitionsTo(out);
@@ -2213,13 +2215,18 @@ class EnumSerializerImpl<T>
       kind: "enum",
       name: this.qualifiedName,
       module: this.modulePath,
-      fields: this.fields.map((f) => ({
-        name: f.name,
-        type: f?.serializer?.typeSignature,
-        number: f.number,
-      })),
-      removed: this.removedNumbers,
+      fields: this.fields.map((f) => {
+        const result = {
+          name: f.name,
+          number: f.number,
+        };
+        const type = f?.serializer?.typeSignature;
+        return type ? {...result, type: type} : result;
+      }),
     };
+    if (this.removedNumbers.length) {
+      enumDefinition.removed = this.removedNumbers;
+    }
     out[recordKey] = enumDefinition;
     for (const f of this.fields) {
       if (f.serializer) {
