@@ -1958,7 +1958,7 @@ class StructSerializerImpl<T>
 
   addRecordDefinitionsTo(out: { [k: string]: RecordDefinition }): void {
     const recordKey = `${this.modulePath}:${this.qualifiedName}`;
-    if (!out[recordKey]) {
+    if (out[recordKey]) {
       return;
     }
     const structDefinition: RecordDefinition = {
@@ -2206,7 +2206,7 @@ class EnumSerializerImpl<T>
 
   addRecordDefinitionsTo(out: { [k: string]: RecordDefinition }): void {
     const recordKey = `${this.modulePath}:${this.qualifiedName}`;
-    if (!out[recordKey]) {
+    if (out[recordKey]) {
       return;
     }
     const enumDefinition: RecordDefinition = {
