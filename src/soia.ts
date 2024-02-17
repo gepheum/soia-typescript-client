@@ -1072,7 +1072,6 @@ export function parseTypeDescriptor(json: Json): TypeDescriptor {
 
   type RecordBundle = {
     readonly definition: RecordDefinition;
-    readonly defaultValue: Json;
     readonly serializer: StructSerializerImpl<Json> | EnumSerializerImpl<Json>;
   };
   const recordBundles: { [k: string]: RecordBundle } = {};
@@ -1081,21 +1080,18 @@ export function parseTypeDescriptor(json: Json): TypeDescriptor {
   // It's not yet initialized.
   for (const record of typeDefinition.records) {
     const recordKey = `${record.module}:${record.name}`;
-    let defaultValue: Json;
     let serializer: StructSerializerImpl<Json> | EnumSerializerImpl<Json>;
     switch (record.kind) {
       case "struct":
-        defaultValue = {};
         serializer = new StructSerializerImpl<Json>(
-          defaultValue,
+          {},
           (copyable: AnyRecord) => Object.freeze({ ...copyable }) as Json,
           (() => ({})) as NewMutableFn<Json>,
         );
         break;
       case "enum":
-        defaultValue = Object.freeze({ kind: "?" });
         serializer = new EnumSerializerImpl<Json>(
-          defaultValue,
+          Object.freeze({ kind: "?" }),
           (name: string, value: unknown) =>
             Object.freeze({ kind: name, value: value as Json }),
         );
@@ -1103,7 +1099,6 @@ export function parseTypeDescriptor(json: Json): TypeDescriptor {
     }
     const recordBundle: RecordBundle = {
       definition: record,
-      defaultValue: defaultValue,
       serializer: serializer,
     };
     recordBundles[recordKey] = recordBundle;
@@ -1124,8 +1119,10 @@ export function parseTypeDescriptor(json: Json): TypeDescriptor {
   }
 
   // Second loop: initialize each serializer.
+  const initOps: Array<() => void> = [];
   for (const recordBundle of Object.values(recordBundles)) {
-    const { definition, defaultValue, serializer } = recordBundle;
+    const { definition, serializer } = recordBundle;
+    const { defaultValue } = serializer;
     const { module, removed } = definition;
     const qualifiedName = definition.name;
     const nameParts = qualifiedName.split(".");
@@ -1133,39 +1130,50 @@ export function parseTypeDescriptor(json: Json): TypeDescriptor {
     const parentType =
       recordBundles[nameParts.slice(0, -1).join(".")]?.serializer;
     switch (definition.kind) {
-      case "struct":
+      case "struct": {
         const fields: Array<[string, string, number, InternalSerializer]> = [];
         for (const f of definition.fields) {
           const fieldSerializer = parse(f.type!);
           fields.push([f.name, f.name, f.number, fieldSerializer]);
           (defaultValue as AnyRecord)[f.name] = fieldSerializer.defaultValue;
         }
-        (serializer as StructSerializerImpl<Json>).init(
-          name,
-          qualifiedName,
-          module,
-          parentType,
-          fields,
-          removed || [],
-        );
-        Object.freeze(defaultValue);
-        break;
-      case "enum":
-        (serializer as EnumSerializerImpl<Json>).init(
-          name,
-          qualifiedName,
-          module,
-          parentType,
-          definition.fields.map((f) => [
-            f.name,
-            f.number,
-            f.type ? parse(f.type) : Object.freeze({ kind: f.name }),
-          ]),
-          removed || [],
+        const s = serializer as StructSerializerImpl<Json>;
+        initOps.push(() =>
+          s.init(
+            name,
+            qualifiedName,
+            module,
+            parentType,
+            fields,
+            removed || [],
+          ),
         );
         break;
+      }
+      case "enum": {
+        const s = serializer as EnumSerializerImpl<Json>;
+        initOps.push(() =>
+          s.init(
+            name,
+            qualifiedName,
+            module,
+            parentType,
+            definition.fields.map((f) => [
+              f.name,
+              f.number,
+              f.type ? parse(f.type) : Object.freeze({ kind: f.name }),
+            ]),
+            removed || [],
+          ),
+        );
+        break;
+      }
     }
   }
+  // We need to actually initialize the serializers *after* the default values
+  // were constructed, because `init` calls `freezeDeeply` and this might result
+  // in freezing the default of another serializer.
+  initOps.forEach((op) => op());
 
   return parse(typeDefinition.type).typeDescriptor;
 }
@@ -1926,6 +1934,7 @@ class StructSerializerImpl<T>
     if (arrayLength <= 2) {
       stream.writeUint8(246 + arrayLength);
     } else {
+      stream.writeUint8(249);
       encodeUint32(arrayLength, stream);
     }
     for (let i = 0; i < arrayLength; ++i) {
