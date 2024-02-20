@@ -73,18 +73,18 @@ export class SerializerTester<T> {
 
       // Test binary serialization.
       const actualBytes = serializer.toBytes(input).toBuffer();
-      it("#toBinaryForm()", () => {
+      it("#toBytes()", () => {
         const actualBase16 = toBase16(actualBytes);
         expect(actualBase16).toBe(expected.bytesAsBase16);
       });
       const reserialized = serializer.fromBytes(actualBytes);
-      it("#toBinaryForm() -> #fromBytes() -> #toBinaryForm()", () => {
+      it("#toBytes() -> #fromBytes() -> #toBytes()", () => {
         const actualBase16 = toBase16(
           serializer.toBytes(reserialized).toBuffer(),
         );
         expect(actualBase16).toBe(expected.bytesAsBase16);
       });
-      it("#toBinaryForm() -> #fromBytes() -> #toJson()", () => {
+      it("#toBytes() -> #fromBytes() -> #toJson()", () => {
         const actualDenseJson = serializer.toJson(reserialized, "dense");
         const expectedDenseJson =
           expected.denseJsonFromReserialized ?? expected.denseJson;

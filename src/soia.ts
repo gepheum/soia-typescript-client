@@ -1829,6 +1829,16 @@ abstract class AbstractRecordSerializer<T, F> extends AbstractSerializer<T> {
   abstract dependencies(): InternalSerializer[];
 }
 
+class UnrecognizedFields {
+  constructor(
+    /** Total number of fields in the struct. */
+    readonly totalSlots: number,
+    readonly contents: ByteString | ReadonlyArray<Json>,
+  ) {
+    Object.freeze(this);
+  }
+}
+
 class StructSerializerImpl<T>
   extends AbstractRecordSerializer<T, _StructFieldInput>
   implements StructDescriptor<T>
@@ -1859,8 +1869,11 @@ class StructSerializerImpl<T>
   removedNumbers: readonly number[] = [];
   // Fields sorted by number in descending order.
   private reversedFields: Array<StructFieldImpl<T>> = [];
-  // The `undefined` slots correspond to removed fields.
-  private readonly slots: Array<StructFieldImpl<T> | undefined> = [];
+  // This is *not* a dense array, missing slots correspond to removed fields.
+  private readonly slots: Array<StructFieldImpl<T>> = [];
+  private recognizedSlots = 0;
+  // Contains one zero for every field number.
+  private readonly zeros: Json[] = [];
   private readonly copyableTemplate: Record<string, unknown> = {};
 
   toJson(input: T, flavor?: JsonFlavor): Json {
@@ -1882,18 +1895,32 @@ class StructSerializerImpl<T>
     } else {
       // Dense flavor.
       const { slots } = this;
-
-      const arrayLength = this.getArrayLength(input);
-
-      const result: Json[] = [];
-      for (let i = 0; i < arrayLength; ++i) {
-        const field = slots[i];
-        result[i] = field
-          ? field.serializer.toJson(
-              (input as AnyRecord)[field.property],
-              flavor,
-            )
-          : 0;
+      let result: Json[];
+      const unrecognizedFields = //
+        (input as AnyRecord)["^"] as UnrecognizedFields;
+      if (unrecognizedFields && Array.isArray(unrecognizedFields.contents)) {
+        // We'll need to copy the unrecognized fields to the JSON.
+        result = this.zeros.concat(
+          unrecognizedFields.contents as ReadonlyArray<Json>,
+        );
+        for (const field of this.fields) {
+          result[field.number] = field.serializer.toJson(
+            (input as AnyRecord)[field.property],
+            flavor,
+          );
+        }
+      } else {
+        result = [];
+        const arrayLength = this.getArrayLength(input);
+        for (let i = 0; i < arrayLength; ++i) {
+          const field = slots[i];
+          result[i] = field
+            ? field.serializer.toJson(
+                (input as AnyRecord)[field.property],
+                flavor,
+              )
+            : 0;
+        }
       }
       return result;
     }
@@ -1905,7 +1932,19 @@ class StructSerializerImpl<T>
     }
     const copyable = { ...this.copyableTemplate };
     if (json instanceof Array) {
-      const { slots } = this;
+      const { slots, recognizedSlots: numSlots } = this;
+      // Dense flavor.
+      if (json.length > numSlots) {
+        // We have some unrecognized fields.
+        const unrecognizedFields = new UnrecognizedFields(
+          json.length,
+          copyJson(json.slice(numSlots)),
+        );
+        copyable["^"] = unrecognizedFields;
+        // Now that we have stored the unrecognized fields in `copyable`, we can
+        // remove them from `json`.
+        json = json.slice(0, numSlots);
+      }
       for (let i = 0; i < json.length && i < slots.length; ++i) {
         const field = slots[i];
         if (field) {
@@ -1915,7 +1954,7 @@ class StructSerializerImpl<T>
       }
       return this.createFn(copyable);
     } else if (json instanceof Object) {
-      // A readable object.
+      // Readable flavor.
       const { fieldMapping } = this;
       for (const name in json) {
         const field = fieldMapping[name];
@@ -1929,15 +1968,31 @@ class StructSerializerImpl<T>
   }
 
   encode(input: T, stream: OutputStream): void {
-    const { slots } = this;
-    const arrayLength = this.getArrayLength(input);
-    if (arrayLength <= 2) {
-      stream.writeUint8(246 + arrayLength);
+    // Total number of slots to write. Includes removed and unrecognized fields.
+    let totalSlots: number;
+    let recognizedSlots: number;
+    let unrecognizedContents: ByteString | undefined;
+    const unrecognizedFields = (input as AnyRecord)["^"] as UnrecognizedFields;
+    if (
+      unrecognizedFields &&
+      unrecognizedFields.contents instanceof ByteString
+    ) {
+      totalSlots = unrecognizedFields.totalSlots;
+      recognizedSlots = this.recognizedSlots;
+      unrecognizedContents = unrecognizedFields.contents;
+    } else {
+      // No unrecognized fields.
+      totalSlots = recognizedSlots = this.getArrayLength(input);
+    }
+
+    if (totalSlots <= 2) {
+      stream.writeUint8(246 + totalSlots);
     } else {
       stream.writeUint8(249);
-      encodeUint32(arrayLength, stream);
+      encodeUint32(totalSlots, stream);
     }
-    for (let i = 0; i < arrayLength; ++i) {
+    const { slots } = this;
+    for (let i = 0; i < recognizedSlots; ++i) {
       const field = slots[i];
       if (field) {
         field.serializer.encode((input as AnyRecord)[field.property], stream);
@@ -1946,6 +2001,10 @@ class StructSerializerImpl<T>
         stream.writeUint8(0);
       }
     }
+    if (unrecognizedContents) {
+      // Copy the unrecognized fields.
+      stream.putBytes(unrecognizedContents);
+    }
   }
 
   decode(stream: InputStream): T {
@@ -1953,10 +2012,11 @@ class StructSerializerImpl<T>
     if (wire === 0 || wire === 246) {
       return this.defaultValue;
     }
-    const length = wire === 249 ? (decodeNumber(stream) as number) : wire - 246;
     const copyable = { ...this.copyableTemplate };
-    const { slots } = this;
-    for (let i = 0; i < length && i < slots.length; ++i) {
+    const totalSlots =
+      wire === 249 ? (decodeNumber(stream) as number) : wire - 246;
+    const { slots, recognizedSlots } = this;
+    for (let i = 0; i < totalSlots && i < recognizedSlots; ++i) {
       const field = slots[i];
       if (field) {
         copyable[field.property] = field.serializer.decode(stream);
@@ -1965,10 +2025,32 @@ class StructSerializerImpl<T>
         decodeUnused(stream);
       }
     }
+    if (totalSlots > recognizedSlots) {
+      // We have some unrecognized fields.
+      const start = stream.offset;
+      for (let i = recognizedSlots; i < totalSlots; ++i) {
+        decodeUnused(stream);
+      }
+      const end = stream.offset;
+      const unrecognizedContents = ByteString.sliceOf(
+        stream.buffer,
+        start,
+        end,
+      );
+      const unrecognizedFields = new UnrecognizedFields(
+        totalSlots,
+        unrecognizedContents,
+      );
+      copyable["^"] = unrecognizedFields;
+    }
     return this.createFn(copyable);
   }
 
-  /** Returns the length of the JSON array for the given input. */
+  /**
+   * Returns the length of the JSON array for the given input, which is also the
+   * number of slots and includes removed fields.
+   * Assumes that `input` does not contain unrecognized fields.
+   */
   private getArrayLength(input: T): number {
     const { reversedFields } = this;
     for (let i = 0; i < reversedFields.length; ++i) {
@@ -2016,15 +2098,18 @@ class StructSerializerImpl<T>
     for (const f of fields) {
       const serializer = f[3] as InternalSerializer;
       const field = new StructFieldImpl<T>(f[0], f[1], f[2], serializer);
+      const { number } = field;
       this.fields.push(field);
-      this.slots[field.number] = field;
+      this.slots[number] = field;
       this.fieldMapping[field.name] = field;
       this.fieldMapping[field.property] = field;
-      this.fieldMapping[field.number] = field;
+      this.fieldMapping[number] = field;
       this.copyableTemplate[field.property] = (this.defaultValue as AnyRecord)[
         field.property
       ];
     }
+    this.recognizedSlots = this.slots.length;
+    this.zeros.push(...Array<Json>(this.recognizedSlots).fill(0));
     this.reversedFields = [...this.fields].sort((a, b) => b.number - a.number);
   }
 
@@ -2270,14 +2355,25 @@ class EnumSerializerImpl<T>
   }
 }
 
+function copyJson(input: readonly Json[]): Json[];
+function copyJson(input: Json): Json;
+function copyJson(input: Json): Json {
+  if (input instanceof Array) {
+    return Object.freeze(input.map(copyJson));
+  } else if (input && typeof input === "object") {
+    return Object.freeze(
+      Object.fromEntries(Object.entries(input).map((k, v) => [k, copyJson(v)])),
+    );
+  }
+  // A boolean, a number, a string or null.
+  return input;
+}
+
 function freezeDeeply(o: unknown): void {
   if (!(o instanceof Object)) {
     return;
   }
-  if (
-    (o instanceof StructSerializerImpl || o instanceof EnumSerializerImpl) &&
-    !o.initialized
-  ) {
+  if (o instanceof AbstractRecordSerializer && !o.initialized) {
     return;
   }
   if (Object.isFrozen(o)) {
