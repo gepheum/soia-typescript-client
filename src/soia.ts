@@ -519,7 +519,7 @@ export interface StructDescriptor<T = unknown> extends TypeDescriptorBase {
   /** The fields of the struct in the order they appear in the `.soia` file. */
   readonly fields: ReadonlyArray<StructField<T>>;
   /** The field numbers marked as removed. */
-  readonly removedNumbers: readonly number[];
+  readonly removedNumbers: ReadonlySet<number>;
 
   /**
    * Looks up a field. The key can be one of: the field name (e.g. "user_id");
@@ -603,7 +603,7 @@ export interface EnumDescriptor<T = unknown> extends TypeDescriptorBase {
   /** The fields of the enum in the order they appear in the `.soia` file. */
   readonly fields: ReadonlyArray<EnumField<T>>;
   /** The field numbers marked as removed. */
-  readonly removedNumbers: readonly number[];
+  readonly removedNumbers: ReadonlySet<number>;
 
   /**
    * Looks up a field. The key can be one of the field name or the field number.
@@ -1076,6 +1076,8 @@ export function parseTypeDescriptor(json: Json): TypeDescriptor {
   };
   const recordBundles: { [k: string]: RecordBundle } = {};
 
+  const unknownEnum = Object.freeze({ kind: "?" });
+
   // First loop: create the serializer for each record.
   // It's not yet initialized.
   for (const record of typeDefinition.records) {
@@ -1091,7 +1093,8 @@ export function parseTypeDescriptor(json: Json): TypeDescriptor {
         break;
       case "enum":
         serializer = new EnumSerializerImpl<Json>(
-          Object.freeze({ kind: "?" }),
+          unknownEnum,
+          (u) => unknownEnum,
           (name: string, value: unknown) =>
             Object.freeze({ kind: name, value: value as Json }),
         );
@@ -1777,12 +1780,14 @@ function decodeUnused(stream: InputStream): void {
 }
 
 abstract class AbstractRecordSerializer<T, F> extends AbstractSerializer<T> {
+  /** Uniquely identifies this record serializer. */
+  readonly token: Symbol = Symbol();
   abstract kind: "struct" | "enum";
   name = "";
   qualifiedName = "";
   modulePath = "";
   parentType: StructDescriptor | EnumDescriptor | undefined;
-  removedNumbers: readonly number[] = [];
+  removedNumbers = new Set<number>();
   initialized?: true;
 
   init(
@@ -1798,7 +1803,7 @@ abstract class AbstractRecordSerializer<T, F> extends AbstractSerializer<T> {
     this.modulePath = modulePath;
     this.parentType = parentType;
     this.registerFields(fields);
-    this.removedNumbers = removedNumbers;
+    this.removedNumbers = new Set(removedNumbers);
     this.initialized = true;
     freezeDeeply(this);
   }
@@ -1816,8 +1821,8 @@ abstract class AbstractRecordSerializer<T, F> extends AbstractSerializer<T> {
       module: this.modulePath,
       fields: this.fieldDefinitions(),
     };
-    if (this.removedNumbers.length) {
-      structDefinition.removed = this.removedNumbers;
+    if (this.removedNumbers.size) {
+      structDefinition.removed = [...this.removedNumbers];
     }
     out[recordKey] = structDefinition;
     for (const dependency of this.dependencies()) {
@@ -1829,11 +1834,15 @@ abstract class AbstractRecordSerializer<T, F> extends AbstractSerializer<T> {
   abstract dependencies(): InternalSerializer[];
 }
 
+/** Unrecognized fields found when deserializing a struct. */
 class UnrecognizedFields {
   constructor(
+    /** Uniquely identifies the struct. */
+    readonly token: Symbol,
     /** Total number of fields in the struct. */
     readonly totalSlots: number,
-    readonly contents: ByteString | ReadonlyArray<Json>,
+    readonly json?: ReadonlyArray<Json>,
+    readonly bytes?: ByteString,
   ) {
     Object.freeze(this);
   }
@@ -1866,7 +1875,6 @@ class StructSerializerImpl<T>
   // Fields in the order they appear in the `.soia` file.
   readonly fields: Array<StructFieldImpl<T>> = [];
   readonly fieldMapping: { [key: string | number]: StructFieldImpl<T> } = {};
-  removedNumbers: readonly number[] = [];
   // Fields sorted by number in descending order.
   private reversedFields: Array<StructFieldImpl<T>> = [];
   // This is *not* a dense array, missing slots correspond to removed fields.
@@ -1898,11 +1906,13 @@ class StructSerializerImpl<T>
       let result: Json[];
       const unrecognizedFields = //
         (input as AnyRecord)["^"] as UnrecognizedFields;
-      if (unrecognizedFields && Array.isArray(unrecognizedFields.contents)) {
+      if (
+        unrecognizedFields &&
+        unrecognizedFields.json &&
+        unrecognizedFields.token === this.token
+      ) {
         // We'll need to copy the unrecognized fields to the JSON.
-        result = this.zeros.concat(
-          unrecognizedFields.contents as ReadonlyArray<Json>,
-        );
+        result = this.zeros.concat(unrecognizedFields.json);
         for (const field of this.fields) {
           result[field.number] = field.serializer.toJson(
             (input as AnyRecord)[field.property],
@@ -1937,6 +1947,7 @@ class StructSerializerImpl<T>
       if (json.length > numSlots) {
         // We have some unrecognized fields.
         const unrecognizedFields = new UnrecognizedFields(
+          this.token,
           json.length,
           copyJson(json.slice(numSlots)),
         );
@@ -1971,15 +1982,16 @@ class StructSerializerImpl<T>
     // Total number of slots to write. Includes removed and unrecognized fields.
     let totalSlots: number;
     let recognizedSlots: number;
-    let unrecognizedContents: ByteString | undefined;
+    let unrecognizedBytes: ByteString | undefined;
     const unrecognizedFields = (input as AnyRecord)["^"] as UnrecognizedFields;
     if (
       unrecognizedFields &&
-      unrecognizedFields.contents instanceof ByteString
+      unrecognizedFields.bytes &&
+      unrecognizedFields.token === this.token
     ) {
       totalSlots = unrecognizedFields.totalSlots;
       recognizedSlots = this.recognizedSlots;
-      unrecognizedContents = unrecognizedFields.contents;
+      unrecognizedBytes = unrecognizedFields.bytes;
     } else {
       // No unrecognized fields.
       totalSlots = recognizedSlots = this.getArrayLength(input);
@@ -2001,9 +2013,9 @@ class StructSerializerImpl<T>
         stream.writeUint8(0);
       }
     }
-    if (unrecognizedContents) {
+    if (unrecognizedBytes) {
       // Copy the unrecognized fields.
-      stream.putBytes(unrecognizedContents);
+      stream.putBytes(unrecognizedBytes);
     }
   }
 
@@ -2032,14 +2044,12 @@ class StructSerializerImpl<T>
         decodeUnused(stream);
       }
       const end = stream.offset;
-      const unrecognizedContents = ByteString.sliceOf(
-        stream.buffer,
-        start,
-        end,
-      );
+      const unrecognizedBytes = ByteString.sliceOf(stream.buffer, start, end);
       const unrecognizedFields = new UnrecognizedFields(
+        this.token,
         totalSlots,
-        unrecognizedContents,
+        undefined,
+        unrecognizedBytes,
       );
       copyable["^"] = unrecognizedFields;
     }
@@ -2108,7 +2118,9 @@ class StructSerializerImpl<T>
         field.property
       ];
     }
-    this.recognizedSlots = this.slots.length;
+    // Removed numbers count as recognized slots.
+    this.recognizedSlots =
+      Math.max(this.slots.length - 1, ...this.removedNumbers) + 1;
     this.zeros.push(...Array<Json>(this.recognizedSlots).fill(0));
     this.reversedFields = [...this.fields].sort((a, b) => b.number - a.number);
   }
@@ -2166,12 +2178,14 @@ class EnumSerializerImpl<T>
   static create<T>(enumClass: AnyRecord): EnumSerializerImpl<T> {
     return new EnumSerializerImpl<T>(
       enumClass["?"] as T,
+      enumClass.fromCopyable as (u: _UnrecognizedEnum) => T,
       enumClass.create as (k: string, v: unknown) => T,
     );
   }
 
   constructor(
     readonly defaultValue: T,
+    private readonly wrapUnrecognized: (u: _UnrecognizedEnum) => T,
     private readonly createFn?: (k: string, v: unknown) => T,
   ) {
     super();
@@ -2183,6 +2197,17 @@ class EnumSerializerImpl<T>
     {};
 
   toJson(input: T, flavor?: JsonFlavor): Json {
+    const unrecognized = (input as AnyRecord)["^"] as
+      | _UnrecognizedEnum
+      | undefined;
+    if (
+      unrecognized &&
+      unrecognized.json &&
+      unrecognized.token === this.token
+    ) {
+      // Unrecognized field.
+      return unrecognized.json;
+    }
     const kind = (input as AnyRecord).kind as string;
     if (kind === "?") {
       return flavor === "readable" ? "?" : 0;
@@ -2211,8 +2236,13 @@ class EnumSerializerImpl<T>
     if (isNumber || typeof json === "string") {
       const field = this.fieldMapping[isNumber ? json : String(json)];
       if (!field) {
-        // Unrecognized field.
-        return this.defaultValue;
+        // Check if the field was removed, in which case we want to return
+        // UNKNOWN, or is unrecognized.
+        return isNumber && this.removedNumbers.has(json)
+          ? this.defaultValue
+          : this.wrapUnrecognized(
+              new _UnrecognizedEnum(this.token, copyJson(json)),
+            );
       }
       return field.serializer ? field.wrappedDefault : field.constant;
     }
@@ -2229,8 +2259,13 @@ class EnumSerializerImpl<T>
     }
     const field = this.fieldMapping[fieldKey];
     if (!field) {
-      // Unknown field.
-      return this.defaultValue;
+      // Check if the field was removed, in which case we want to return
+      // UNKNOWN, or is unrecognized.
+      return typeof fieldKey === "number" && this.removedNumbers.has(fieldKey)
+        ? this.defaultValue
+        : this.wrapUnrecognized(
+            new _UnrecognizedEnum(this.token, copyJson(json), undefined),
+          );
     }
     const { serializer } = field;
     if (!serializer) {
@@ -2240,6 +2275,17 @@ class EnumSerializerImpl<T>
   }
 
   encode(input: T, stream: OutputStream): void {
+    const unrecognized = //
+      (input as AnyRecord)["^"] as _UnrecognizedEnum | undefined;
+    if (
+      unrecognized &&
+      unrecognized.bytes &&
+      unrecognized.token === this.token
+    ) {
+      // Unrecognized field.
+      stream.putBytes(unrecognized.bytes);
+      return;
+    }
     const kind = (input as AnyRecord).kind as string;
     if (kind === "?") {
       stream.writeUint8(0);
@@ -2264,17 +2310,27 @@ class EnumSerializerImpl<T>
   }
 
   decode(stream: InputStream): T {
-    const wire = stream.dataView.getUint8(stream.offset);
+    const startOffset = stream.offset;
+    const wire = stream.dataView.getUint8(startOffset);
     if (wire < 242) {
       // A number
       const number = decodeNumber(stream) as number;
       const field = this.fieldMapping[number];
       if (!field) {
-        // Unknown field.
-        return this.defaultValue;
+        // Check if the field was removed, in which case we want to return
+        // UNKNOWN, or is unrecognized.
+        if (this.removedNumbers.has(number)) {
+          return this.defaultValue;
+        } else {
+          const { offset } = stream;
+          const bytes = ByteString.sliceOf(stream.buffer, startOffset, offset);
+          return this.wrapUnrecognized(
+            new _UnrecognizedEnum(this.token, undefined, bytes),
+          );
+        }
       }
       if (field.serializer) {
-        return field.wrap(field.serializer.defaultValue);
+        return field.wrappedDefault;
       } else {
         return field.constant;
       }
@@ -2284,12 +2340,23 @@ class EnumSerializerImpl<T>
         wire === 248 ? (decodeNumber(stream) as number) : wire - 250;
       const field = this.fieldMapping[number];
       if (!field) {
-        // Unknown field.
-        return this.defaultValue;
+        decodeUnused(stream);
+        // Check if the field was removed, in which case we want to return
+        // UNKNOWN, or is unrecognized.
+        if (this.removedNumbers.has(number)) {
+          return this.defaultValue;
+        } else {
+          const { offset } = stream;
+          const bytes = ByteString.sliceOf(stream.buffer, startOffset, offset);
+          return this.wrapUnrecognized(
+            new _UnrecognizedEnum(this.token, undefined, bytes),
+          );
+        }
       }
       if (field.serializer) {
         return field.wrap(field.serializer.decode(stream));
       } else {
+        decodeUnused(stream);
         return field.constant;
       }
     }
@@ -2360,7 +2427,7 @@ function copyJson(input: Json): Json;
 function copyJson(input: Json): Json {
   if (input instanceof Array) {
     return Object.freeze(input.map(copyJson));
-  } else if (input && typeof input === "object") {
+  } else if (input instanceof Object) {
     return Object.freeze(
       Object.fromEntries(Object.entries(input).map((k, v) => [k, copyJson(v)])),
     );
@@ -2477,6 +2544,16 @@ export abstract class _EnumBase {
 
   toString(): string {
     return toStringImpl(this);
+  }
+}
+
+export class _UnrecognizedEnum {
+  constructor(
+    readonly token: Symbol,
+    readonly json?: Json,
+    readonly bytes?: ByteString,
+  ) {
+    Object.freeze(this);
   }
 }
 
