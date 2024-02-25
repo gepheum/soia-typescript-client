@@ -1858,7 +1858,7 @@ class StructSerializerImpl<T>
     ) => MutableForm<T>;
     return new StructSerializerImpl(
       frozenClass.DEFAULT as T,
-      frozenClass.create as (copyable: AnyRecord) => T,
+      (c) => (frozenClass.create as (copyable: AnyRecord) => T)(c),
       () => new mutableCtor(),
     );
   }
@@ -1942,19 +1942,19 @@ class StructSerializerImpl<T>
     }
     const copyable = { ...this.copyableTemplate };
     if (json instanceof Array) {
-      const { slots, recognizedSlots: numSlots } = this;
+      const { slots, recognizedSlots } = this;
       // Dense flavor.
-      if (json.length > numSlots) {
+      if (json.length > recognizedSlots) {
         // We have some unrecognized fields.
         const unrecognizedFields = new UnrecognizedFields(
           this.token,
           json.length,
-          copyJson(json.slice(numSlots)),
+          copyJson(json.slice(recognizedSlots)),
         );
         copyable["^"] = unrecognizedFields;
         // Now that we have stored the unrecognized fields in `copyable`, we can
         // remove them from `json`.
-        json = json.slice(0, numSlots);
+        json = json.slice(0, recognizedSlots);
       }
       for (let i = 0; i < json.length && i < slots.length; ++i) {
         const field = slots[i];
@@ -2178,8 +2178,8 @@ class EnumSerializerImpl<T>
   static create<T>(enumClass: AnyRecord): EnumSerializerImpl<T> {
     return new EnumSerializerImpl<T>(
       enumClass["?"] as T,
-      enumClass.fromCopyable as (u: _UnrecognizedEnum) => T,
-      enumClass.create as (k: string, v: unknown) => T,
+      (u) => (enumClass.fromCopyable as (u: _UnrecognizedEnum) => T)(u),
+      (c, v) => (enumClass.create as (k: string, v: unknown) => T)(c, v),
     );
   }
 
