@@ -1,3 +1,5 @@
+import { stringify } from "querystring";
+
 /**
  * A single moment in time represented in a platform-independent format, with a
  * precision of one millisecond.
@@ -1755,7 +1757,8 @@ function decodeUnused(stream: InputStream): void {
       break;
     case 11:
     case 13:
-      stream.offset += decodeNumber(stream) as number;
+      const length = decodeNumber(stream) as number;
+      stream.offset += length;
       break;
     case 15:
     case 18:
@@ -1802,8 +1805,8 @@ abstract class AbstractRecordSerializer<T, F> extends AbstractSerializer<T> {
     this.qualifiedName = qualifiedName;
     this.modulePath = modulePath;
     this.parentType = parentType;
-    this.registerFields(fields);
     this.removedNumbers = new Set(removedNumbers);
+    this.registerFields(fields);
     this.initialized = true;
     freezeDeeply(this);
   }
@@ -2025,10 +2028,11 @@ class StructSerializerImpl<T>
       return this.defaultValue;
     }
     const copyable = { ...this.copyableTemplate };
-    const totalSlots =
+    const encodedSlots =
       wire === 249 ? (decodeNumber(stream) as number) : wire - 246;
     const { slots, recognizedSlots } = this;
-    for (let i = 0; i < totalSlots && i < recognizedSlots; ++i) {
+    // Do not read more slots than the number of recognized slots.
+    for (let i = 0; i < encodedSlots && i < recognizedSlots; ++i) {
       const field = slots[i];
       if (field) {
         copyable[field.property] = field.serializer.decode(stream);
@@ -2037,17 +2041,18 @@ class StructSerializerImpl<T>
         decodeUnused(stream);
       }
     }
-    if (totalSlots > recognizedSlots) {
+    if (encodedSlots > recognizedSlots) {
       // We have some unrecognized fields.
       const start = stream.offset;
-      for (let i = recognizedSlots; i < totalSlots; ++i) {
+      // TODO: remove!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      for (let i = recognizedSlots; i < encodedSlots; ++i) {
         decodeUnused(stream);
       }
       const end = stream.offset;
       const unrecognizedBytes = ByteString.sliceOf(stream.buffer, start, end);
       const unrecognizedFields = new UnrecognizedFields(
         this.token,
-        totalSlots,
+        encodedSlots,
         undefined,
         unrecognizedBytes,
       );
