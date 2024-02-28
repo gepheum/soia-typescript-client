@@ -2182,7 +2182,7 @@ class EnumSerializerImpl<T>
 {
   static create<T>(enumClass: AnyRecord): EnumSerializerImpl<T> {
     return new EnumSerializerImpl<T>(
-      enumClass["?"] as T,
+      enumClass.UNKNOWN as T,
       (u) => (enumClass.fromCopyable as (u: _UnrecognizedEnum) => T)(u),
       (c, v) => (enumClass.create as (k: string, v: unknown) => T)(c, v),
     );
