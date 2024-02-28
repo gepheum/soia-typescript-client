@@ -1,5 +1,3 @@
-import { stringify } from "querystring";
-
 /**
  * A single moment in time represented in a platform-independent format, with a
  * precision of one millisecond.
