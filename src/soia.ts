@@ -2301,8 +2301,8 @@ class EnumSerializerImpl<T>
     if (serializer) {
       // A value field.
       const value = (input as AnyRecord).value;
-      if (number < 5) {
-        stream.writeUint8(250 + number);
+      if (number < 6) {
+        stream.writeUint8(249 + number);
       } else {
         stream.writeUint8(248);
         encodeUint32(number, stream);
@@ -2342,7 +2342,7 @@ class EnumSerializerImpl<T>
     } else {
       ++stream.offset;
       const number =
-        wire === 248 ? (decodeNumber(stream) as number) : wire - 250;
+        wire === 248 ? (decodeNumber(stream) as number) : wire - 249;
       const field = this.fieldMapping[number];
       if (!field) {
         decodeUnused(stream);
