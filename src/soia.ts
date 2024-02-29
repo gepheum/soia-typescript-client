@@ -534,9 +534,9 @@ export interface StructDescriptor<T = unknown> extends TypeDescriptorBase {
 
   /**
    * Returns a new instance of the generated mutable class for a struct.
-   * Performs a shallow copy of `copyable` if `copyable` is specified.
+   * Performs a shallow copy of `initializer` if `initializer` is specified.
    */
-  newMutable(copyable?: T | MutableForm<T>): MutableForm<T>;
+  newMutable(initializer?: T | MutableForm<T>): MutableForm<T>;
 }
 
 /** Field of a Soia struct. */
@@ -573,7 +573,7 @@ export interface StructField<Struct = unknown, Value = unknown> {
 export type StructFieldResult<Struct, Key extends string | number> =
   | StructField<Struct>
   | (Struct extends _FrozenBase
-      ? Key extends keyof NonNullable<Struct[typeof _COPYABLE]>
+      ? Key extends keyof NonNullable<Struct[typeof _INITIALIZER]>
         ? never
         : undefined
       : undefined);
@@ -720,7 +720,7 @@ export interface Freezable<T> {
 
 /**
  * Every generated frozen class has a `create` static method which expects a
- * `WholeOrPartial<Struct.Copyable, Accept>` parameter. If `Accept` is
+ * `WholeOrPartial<Struct.Initializer, Accept>` parameter. If `Accept` is
  * `"whole"`, then the compiler requires the object parameter to have a value
  * set for each field of the struct. Otherwise (the default), the compiler
  * accepts any subset of the fields of the struct. Every missing field will be
@@ -747,9 +747,9 @@ export interface Freezable<T> {
  * // }
  */
 export type WholeOrPartial<
-  Copyable,
+  Initializer,
   Accept extends "partial" | "whole",
-> = Accept extends "partial" ? Copyable : Required<Copyable>; //
+> = Accept extends "partial" ? Initializer : Required<Initializer>;
 
 // =============================================================================
 // Implementation of serializers and type descriptors
@@ -1087,7 +1087,7 @@ export function parseTypeDescriptor(json: Json): TypeDescriptor {
       case "struct":
         serializer = new StructSerializerImpl<Json>(
           {},
-          (copyable: AnyRecord) => Object.freeze({ ...copyable }) as Json,
+          (initializer: AnyRecord) => Object.freeze({ ...initializer }) as Json,
           (() => ({})) as NewMutableFn<Json>,
         );
         break;
@@ -1726,7 +1726,7 @@ const PRIMITIVE_SERIALIZERS: {
 };
 
 type NewMutableFn<Frozen> = (
-  copyable?: Frozen | MutableForm<Frozen>,
+  initializer?: Frozen | MutableForm<Frozen>,
 ) => MutableForm<Frozen>;
 
 function decodeUnused(stream: InputStream): void {
@@ -1855,18 +1855,18 @@ class StructSerializerImpl<T>
 {
   static create<T>(frozenClass: AnyRecord): StructSerializerImpl<T> {
     const mutableCtor = frozenClass.Mutable as new (
-      copyable?: T | MutableForm<T>,
+      initializer?: T | MutableForm<T>,
     ) => MutableForm<T>;
     return new StructSerializerImpl(
       frozenClass.DEFAULT as T,
-      (c) => (frozenClass.create as (copyable: AnyRecord) => T)(c),
+      (c) => (frozenClass.create as (initializer: AnyRecord) => T)(c),
       () => new mutableCtor(),
     );
   }
 
   constructor(
     readonly defaultValue: T,
-    readonly createFn: (copyable: AnyRecord) => T,
+    readonly createFn: (initializer: AnyRecord) => T,
     readonly newMutableFn: NewMutableFn<T>,
   ) {
     super();
@@ -1883,7 +1883,7 @@ class StructSerializerImpl<T>
   private recognizedSlots = 0;
   // Contains one zero for every field number.
   private readonly zeros: Json[] = [];
-  private readonly copyableTemplate: Record<string, unknown> = {};
+  private readonly initializerTemplate: Record<string, unknown> = {};
 
   toJson(input: T, flavor?: JsonFlavor): Json {
     if (input === this.defaultValue) {
@@ -1941,7 +1941,7 @@ class StructSerializerImpl<T>
     if (!json) {
       return this.defaultValue;
     }
-    const copyable = { ...this.copyableTemplate };
+    const initializer = { ...this.initializerTemplate };
     if (json instanceof Array) {
       const { slots, recognizedSlots } = this;
       // Dense flavor.
@@ -1952,29 +1952,29 @@ class StructSerializerImpl<T>
           json.length,
           copyJson(json.slice(recognizedSlots)),
         );
-        copyable["^"] = unrecognizedFields;
-        // Now that we have stored the unrecognized fields in `copyable`, we can
-        // remove them from `json`.
+        initializer["^"] = unrecognizedFields;
+        // Now that we have stored the unrecognized fields in `initializer`, we
+        // can remove them from `json`.
         json = json.slice(0, recognizedSlots);
       }
       for (let i = 0; i < json.length && i < slots.length; ++i) {
         const field = slots[i];
         if (field) {
-          copyable[field.property] = field.serializer.fromJson(json[i]!);
+          initializer[field.property] = field.serializer.fromJson(json[i]!);
         }
         // Else the field was removed.
       }
-      return this.createFn(copyable);
+      return this.createFn(initializer);
     } else if (json instanceof Object) {
       // Readable flavor.
       const { fieldMapping } = this;
       for (const name in json) {
         const field = fieldMapping[name];
         if (field) {
-          copyable[field.property] = field.serializer.fromJson(json[name]!);
+          initializer[field.property] = field.serializer.fromJson(json[name]!);
         }
       }
-      return this.createFn(copyable);
+      return this.createFn(initializer);
     }
     throw TypeError();
   }
@@ -2025,7 +2025,7 @@ class StructSerializerImpl<T>
     if (wire === 0 || wire === 246) {
       return this.defaultValue;
     }
-    const copyable = { ...this.copyableTemplate };
+    const initializer = { ...this.initializerTemplate };
     const encodedSlots =
       wire === 249 ? (decodeNumber(stream) as number) : wire - 246;
     const { slots, recognizedSlots } = this;
@@ -2033,7 +2033,7 @@ class StructSerializerImpl<T>
     for (let i = 0; i < encodedSlots && i < recognizedSlots; ++i) {
       const field = slots[i];
       if (field) {
-        copyable[field.property] = field.serializer.decode(stream);
+        initializer[field.property] = field.serializer.decode(stream);
       } else {
         // The field was removed.
         decodeUnused(stream);
@@ -2054,9 +2054,9 @@ class StructSerializerImpl<T>
         undefined,
         unrecognizedBytes,
       );
-      copyable["^"] = unrecognizedFields;
+      initializer["^"] = unrecognizedFields;
     }
-    return this.createFn(copyable);
+    return this.createFn(initializer);
   }
 
   /**
@@ -2103,8 +2103,8 @@ class StructSerializerImpl<T>
     return this.fieldMapping[key]!;
   }
 
-  newMutable(copyable?: T | MutableForm<T>): MutableForm<T> {
-    return this.newMutableFn(copyable);
+  newMutable(initializer?: T | MutableForm<T>): MutableForm<T> {
+    return this.newMutableFn(initializer);
   }
 
   registerFields(fields: readonly _StructFieldInput[]) {
@@ -2117,9 +2117,9 @@ class StructSerializerImpl<T>
       this.fieldMapping[field.name] = field;
       this.fieldMapping[field.property] = field;
       this.fieldMapping[number] = field;
-      this.copyableTemplate[field.property] = (this.defaultValue as AnyRecord)[
-        field.property
-      ];
+      this.initializerTemplate[field.property] = (
+        this.defaultValue as AnyRecord
+      )[field.property];
     }
     // Removed numbers count as recognized slots.
     this.recognizedSlots =
@@ -2181,7 +2181,7 @@ class EnumSerializerImpl<T>
   static create<T>(enumClass: AnyRecord): EnumSerializerImpl<T> {
     return new EnumSerializerImpl<T>(
       enumClass.UNKNOWN as T,
-      (u) => (enumClass.fromCopyable as (u: _UnrecognizedEnum) => T)(u),
+      (u) => (enumClass.from as (u: _UnrecognizedEnum) => T)(u),
       (c, v) => (enumClass.create as (k: string, v: unknown) => T)(c, v),
     );
   }
@@ -2490,7 +2490,7 @@ function freezeArray<T>(array: readonly T[]): readonly T[] {
 // Internal functions classes used by generated code
 // =============================================================================
 
-export declare const _COPYABLE: unique symbol;
+export declare const _INITIALIZER: unique symbol;
 
 export abstract class _FrozenBase {
   toMutable(): unknown {
@@ -2505,7 +2505,7 @@ export abstract class _FrozenBase {
     return toStringImpl(this);
   }
 
-  declare [_COPYABLE]: unknown;
+  declare [_INITIALIZER]: unknown;
 }
 
 export abstract class _MutableBase {
@@ -2572,33 +2572,33 @@ export function _identity<T>(arg: T): T {
   return arg;
 }
 
-export function _toFrozenArray<T, Copyable>(
-  copyables: readonly Copyable[],
-  itemToFrozenFn: (item: Copyable) => T,
+export function _toFrozenArray<T, Initializer>(
+  initializers: readonly Initializer[],
+  itemToFrozenFn: (item: Initializer) => T,
 ): readonly T[] {
-  if ((copyables as MaybeDeeplyFrozen)[DEEPLY_FROZEN]) {
-    return copyables as unknown as readonly T[];
+  if ((initializers as MaybeDeeplyFrozen)[DEEPLY_FROZEN]) {
+    return initializers as unknown as readonly T[];
   }
-  if (!copyables.length) {
+  if (!initializers.length) {
     return _EMPTY_ARRAY;
   }
   return freezeArray(
     itemToFrozenFn === _identity
-      ? (copyables.slice() as unknown as readonly T[])
-      : copyables.map(itemToFrozenFn),
+      ? (initializers.slice() as unknown as readonly T[])
+      : initializers.map(itemToFrozenFn),
   );
 }
 
-export function _toFrozenOrMutableArray<T, Copyable>(
-  copyables: readonly Copyable[],
-  itemToFrozenFn?: (item: Copyable) => T,
+export function _toFrozenOrMutableArray<T, Initializer>(
+  initializers: readonly Initializer[],
+  itemToFrozenFn?: (item: Initializer) => T,
 ): T[] {
-  if ((copyables as MaybeDeeplyFrozen)[DEEPLY_FROZEN]) {
-    return copyables as unknown as T[];
+  if ((initializers as MaybeDeeplyFrozen)[DEEPLY_FROZEN]) {
+    return initializers as unknown as T[];
   }
   return itemToFrozenFn === _identity
-    ? copyables.map(itemToFrozenFn)
-    : (copyables.slice() as unknown as T[]);
+    ? initializers.map(itemToFrozenFn)
+    : (initializers.slice() as unknown as T[]);
 }
 
 export function _toMutableArray<T>(arg: readonly T[]): T[] {
