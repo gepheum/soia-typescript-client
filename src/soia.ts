@@ -1092,11 +1092,10 @@ export function parseTypeDescriptor(json: Json): TypeDescriptor {
         );
         break;
       case "enum":
-        serializer = new EnumSerializerImpl<Json>(
-          unknownEnum,
-          (u) => unknownEnum,
-          (name: string, value: unknown) =>
-            Object.freeze({ kind: name, value: value as Json }),
+        serializer = new EnumSerializerImpl<Json>(unknownEnum, (o) =>
+          o instanceof UnrecognizedEnum
+            ? unknownEnum
+            : (Object.freeze({ kind: o.kind, value: o.value }) as Json),
         );
         break;
     }
@@ -2042,7 +2041,6 @@ class StructSerializerImpl<T>
     if (encodedSlots > recognizedSlots) {
       // We have some unrecognized fields.
       const start = stream.offset;
-      // TODO: remove!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       for (let i = recognizedSlots; i < encodedSlots; ++i) {
         decodeUnused(stream);
       }
@@ -2145,14 +2143,27 @@ interface EnumConstantFieldImpl<Enum> extends EnumConstantField<Enum> {
   readonly serializer?: undefined;
 }
 
+class UnrecognizedEnum {
+  constructor(
+    readonly token: Symbol,
+    readonly json?: Json,
+    readonly bytes?: ByteString,
+  ) {
+    Object.freeze(this);
+  }
+}
+
 class EnumValueFieldImpl<Enum, Value = unknown> {
   constructor(
     readonly name: string,
     readonly number: number,
     readonly serializer: InternalSerializer<Value>,
-    private createFn: (k: string, v: unknown) => Enum,
+    private createFn: (initializer: { kind: string; value: unknown }) => Enum,
   ) {
-    this.wrappedDefault = createFn(name, serializer.defaultValue);
+    this.wrappedDefault = createFn({
+      kind: name,
+      value: serializer.defaultValue,
+    });
   }
 
   readonly wrappedDefault: Enum;
@@ -2170,7 +2181,7 @@ class EnumValueFieldImpl<Enum, Value = unknown> {
   }
 
   wrap(value: Value): Enum {
-    return this.createFn(this.name, value) as Enum;
+    return this.createFn({ kind: this.name, value: value });
   }
 }
 
@@ -2179,17 +2190,16 @@ class EnumSerializerImpl<T>
   implements EnumDescriptor<T>
 {
   static create<T>(enumClass: AnyRecord): EnumSerializerImpl<T> {
-    return new EnumSerializerImpl<T>(
-      enumClass.UNKNOWN as T,
-      (u) => (enumClass.from as (u: _UnrecognizedEnum) => T)(u),
-      (c, v) => (enumClass.create as (k: string, v: unknown) => T)(c, v),
+    return new EnumSerializerImpl<T>(enumClass.UNKNOWN as T, (i) =>
+      (enumClass.from as (o: unknown) => T)(i),
     );
   }
 
   constructor(
     readonly defaultValue: T,
-    private readonly wrapUnrecognized: (u: _UnrecognizedEnum) => T,
-    private readonly createFn?: (k: string, v: unknown) => T,
+    private readonly createFn: (
+      o: { kind: string; value: unknown } | UnrecognizedEnum,
+    ) => T,
   ) {
     super();
   }
@@ -2201,7 +2211,7 @@ class EnumSerializerImpl<T>
 
   toJson(input: T, flavor?: JsonFlavor): Json {
     const unrecognized = (input as AnyRecord)["^"] as
-      | _UnrecognizedEnum
+      | UnrecognizedEnum
       | undefined;
     if (
       unrecognized &&
@@ -2243,9 +2253,7 @@ class EnumSerializerImpl<T>
         // UNKNOWN, or is unrecognized.
         return isNumber && this.removedNumbers.has(json)
           ? this.defaultValue
-          : this.wrapUnrecognized(
-              new _UnrecognizedEnum(this.token, copyJson(json)),
-            );
+          : this.createFn(new UnrecognizedEnum(this.token, copyJson(json)));
       }
       return field.serializer ? field.wrappedDefault : field.constant;
     }
@@ -2266,8 +2274,8 @@ class EnumSerializerImpl<T>
       // UNKNOWN, or is unrecognized.
       return typeof fieldKey === "number" && this.removedNumbers.has(fieldKey)
         ? this.defaultValue
-        : this.wrapUnrecognized(
-            new _UnrecognizedEnum(this.token, copyJson(json), undefined),
+        : this.createFn(
+            new UnrecognizedEnum(this.token, copyJson(json), undefined),
           );
     }
     const { serializer } = field;
@@ -2279,7 +2287,7 @@ class EnumSerializerImpl<T>
 
   encode(input: T, stream: OutputStream): void {
     const unrecognized = //
-      (input as AnyRecord)["^"] as _UnrecognizedEnum | undefined;
+      (input as AnyRecord)["^"] as UnrecognizedEnum | undefined;
     if (
       unrecognized &&
       unrecognized.bytes &&
@@ -2327,8 +2335,8 @@ class EnumSerializerImpl<T>
         } else {
           const { offset } = stream;
           const bytes = ByteString.sliceOf(stream.buffer, startOffset, offset);
-          return this.wrapUnrecognized(
-            new _UnrecognizedEnum(this.token, undefined, bytes),
+          return this.createFn(
+            new UnrecognizedEnum(this.token, undefined, bytes),
           );
         }
       }
@@ -2351,8 +2359,8 @@ class EnumSerializerImpl<T>
         } else {
           const { offset } = stream;
           const bytes = ByteString.sliceOf(stream.buffer, startOffset, offset);
-          return this.wrapUnrecognized(
-            new _UnrecognizedEnum(this.token, undefined, bytes),
+          return this.createFn(
+            new UnrecognizedEnum(this.token, undefined, bytes),
           );
         }
       }
@@ -2525,24 +2533,61 @@ export abstract class _MutableBase {
 }
 
 export abstract class _EnumBase {
-  abstract readonly kind: string;
-
-  protected as(kind: string): unknown {
-    if ((this as AnyRecord).kind !== kind) {
-      return undefined;
+  constructor(
+    readonly kind: string,
+    readonly value?: unknown,
+    unrecognized?: UnrecognizedEnum,
+  ) {
+    if (unrecognized) {
+      if (!(unrecognized instanceof UnrecognizedEnum)) {
+        throw new TypeError();
+      }
+      (this as AnyRecord)["^"] = unrecognized;
     }
-    return (this as AnyRecord).value;
+    Object.freeze(this);
   }
 
-  switch<T>(switcher: unknown): unknown {
-    const callback =
-      (switcher as AnyRecord)[(this as AnyRecord).kind as string] ||
-      (switcher as AnyRecord)["*"];
-    const { value } = this as AnyRecord;
-    if (value !== undefined) {
-      return (callback as (v: unknown) => T)(value);
+  static create(initializer: unknown): unknown {
+    if (initializer instanceof this) {
+      return initializer;
     }
-    return (callback as () => T)();
+    const clazz = this as unknown as { [_: string]: unknown } & (new (
+      kind: string,
+      value: unknown,
+      unrecognized?: UnrecognizedEnum,
+    ) => unknown);
+    if (typeof initializer === "string") {
+      switch (initializer) {
+        case "?":
+          initializer = "UNKNOWN";
+          break;
+        case "UNKNOWN":
+          initializer = "UNKNOWN_";
+          break;
+      }
+      const maybeResult = clazz[initializer as string];
+      if (maybeResult instanceof this) {
+        return maybeResult;
+      }
+      throw new Error(`Constant not found: ${initializer}`);
+    }
+    if (initializer instanceof UnrecognizedEnum) {
+      return new clazz("?", undefined, initializer);
+    }
+    const kind = (initializer as { kind: string }).kind;
+    if (kind === undefined) {
+      throw new Error("Missing entry: kind");
+    }
+    const createValue = clazz._createValue as (_: unknown) => unknown;
+    const value = createValue(initializer);
+    if (value === undefined) {
+      throw new Error(`Value field not found: ${kind}`);
+    }
+    return new clazz(kind, value);
+  }
+
+  protected static _createValue(initializer: unknown): unknown {
+    return undefined;
   }
 
   toString(): string {
@@ -2550,15 +2595,13 @@ export abstract class _EnumBase {
   }
 }
 
-export class _UnrecognizedEnum {
-  constructor(
-    readonly token: Symbol,
-    readonly json?: Json,
-    readonly bytes?: ByteString,
-  ) {
-    Object.freeze(this);
-  }
-}
+// The TypeScript compile is not happy if we define this getter within the
+// `_EnumBase` class definition.
+Object.defineProperty(_EnumBase.prototype, "union", {
+  get: function () {
+    return this;
+  },
+});
 
 function toStringImpl<T>(value: T): string {
   const serializer = Object.getPrototypeOf(value).constructor
