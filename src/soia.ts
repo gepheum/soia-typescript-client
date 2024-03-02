@@ -2191,7 +2191,7 @@ class EnumSerializerImpl<T>
 {
   static create<T>(enumClass: AnyRecord): EnumSerializerImpl<T> {
     return new EnumSerializerImpl<T>(enumClass.UNKNOWN as T, (i) =>
-      (enumClass.from as (o: unknown) => T)(i),
+      (enumClass.create as (o: unknown) => T)(i),
     );
   }
 
