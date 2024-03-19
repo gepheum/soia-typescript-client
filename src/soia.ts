@@ -1076,8 +1076,6 @@ export function parseTypeDescriptor(json: Json): TypeDescriptor {
   };
   const recordBundles: { [k: string]: RecordBundle } = {};
 
-  const unknownEnum = Object.freeze({ kind: "?" });
-
   // First loop: create the serializer for each record.
   // It's not yet initialized.
   for (const record of typeDefinition.records) {
@@ -1092,10 +1090,13 @@ export function parseTypeDescriptor(json: Json): TypeDescriptor {
         );
         break;
       case "enum":
-        serializer = new EnumSerializerImpl<Json>(unknownEnum, (o) =>
+        serializer = new EnumSerializerImpl<Json>((o: unknown) =>
           o instanceof UnrecognizedEnum
-            ? unknownEnum
-            : (Object.freeze({ kind: o.kind, value: o.value }) as Json),
+            ? Object.freeze({ kind: "?" })
+            : (Object.freeze({
+                kind: (o as AnyRecord).kind,
+                value: (o as AnyRecord).value,
+              }) as Json),
         );
         break;
     }
@@ -1133,40 +1134,38 @@ export function parseTypeDescriptor(json: Json): TypeDescriptor {
       recordBundles[nameParts.slice(0, -1).join(".")]?.serializer;
     switch (definition.kind) {
       case "struct": {
-        const fields: Array<[string, string, number, InternalSerializer]> = [];
+        const fields: StructFieldImpl[] = [];
         for (const f of definition.fields) {
           const fieldSerializer = parse(f.type!);
-          fields.push([f.name, f.name, f.number, fieldSerializer]);
+          fields.push(
+            new StructFieldImpl(f.name, f.name, f.number, fieldSerializer),
+          );
           (defaultValue as AnyRecord)[f.name] = fieldSerializer.defaultValue;
         }
         const s = serializer as StructSerializerImpl<Json>;
         initOps.push(() =>
-          s.init(
-            name,
-            qualifiedName,
-            module,
-            parentType,
-            fields,
-            removed || [],
-          ),
+          s.init(name, module, parentType, fields, removed || []),
         );
         break;
       }
       case "enum": {
         const s = serializer as EnumSerializerImpl<Json>;
+        const fields = definition.fields.map((f) =>
+          f.type
+            ? new EnumValueFieldImpl<Json>(
+                f.name,
+                f.number,
+                parse(f.type),
+                serializer.createFn,
+              )
+            : ({
+                name: f.name,
+                number: f.number,
+                constant: Object.freeze({ kind: f.name }),
+              } as EnumConstantField<Json>),
+        );
         initOps.push(() =>
-          s.init(
-            name,
-            qualifiedName,
-            module,
-            parentType,
-            definition.fields.map((f) => [
-              f.name,
-              f.number,
-              f.type ? parse(f.type) : Object.freeze({ kind: f.name }),
-            ]),
-            removed || [],
-          ),
+          s.init(name, module, parentType, fields, removed || []),
         );
         break;
       }
@@ -1284,6 +1283,11 @@ abstract class FloatSerializer<
 
   decode(stream: InputStream): number {
     return Number(decodeNumber(stream));
+  }
+
+  isDefault(input: number): boolean {
+    // Needs to work for NaN.
+    return input === 0;
   }
 }
 
@@ -1550,7 +1554,7 @@ class ByteStringSerializer extends AbstractPrimitiveSerializer<"bytes"> {
 
 type AnyRecord = Record<string, unknown>;
 
-class StructFieldImpl<Struct, Value = unknown>
+class StructFieldImpl<Struct = unknown, Value = unknown>
   implements StructField<Struct, Value>
 {
   constructor(
@@ -1573,7 +1577,7 @@ class StructFieldImpl<Struct, Value = unknown>
   }
 }
 
-type EnumFieldImpl<Enum> =
+type EnumFieldImpl<Enum = unknown> =
   | EnumConstantFieldImpl<Enum>
   | EnumValueFieldImpl<Enum, unknown>;
 
@@ -1784,7 +1788,6 @@ abstract class AbstractRecordSerializer<T, F> extends AbstractSerializer<T> {
   readonly token: Symbol = Symbol();
   abstract kind: "struct" | "enum";
   name = "";
-  qualifiedName = "";
   modulePath = "";
   parentType: StructDescriptor | EnumDescriptor | undefined;
   removedNumbers = new Set<number>();
@@ -1792,20 +1795,23 @@ abstract class AbstractRecordSerializer<T, F> extends AbstractSerializer<T> {
 
   init(
     name: string,
-    qualifiedName: string,
     modulePath: string,
     parentType: StructDescriptor | EnumDescriptor | undefined,
     fields: readonly F[],
     removedNumbers: readonly number[],
   ) {
     this.name = name;
-    this.qualifiedName = qualifiedName;
     this.modulePath = modulePath;
     this.parentType = parentType;
     this.removedNumbers = new Set(removedNumbers);
     this.registerFields(fields);
     this.initialized = true;
     freezeDeeply(this);
+  }
+
+  get qualifiedName(): string {
+    const { name, parentType } = this;
+    return parentType ? `${parentType.name}.${this.name}` : this.name;
   }
 
   abstract registerFields(fields: readonly F[]): void;
@@ -1848,21 +1854,10 @@ class UnrecognizedFields {
   }
 }
 
-class StructSerializerImpl<T>
-  extends AbstractRecordSerializer<T, _StructFieldInput>
+class StructSerializerImpl<T = unknown>
+  extends AbstractRecordSerializer<T, StructFieldImpl<T>>
   implements StructDescriptor<T>
 {
-  static create<T>(frozenClass: AnyRecord): StructSerializerImpl<T> {
-    const mutableCtor = frozenClass.Mutable as new (
-      initializer?: T | MutableForm<T>,
-    ) => MutableForm<T>;
-    return new StructSerializerImpl(
-      frozenClass.DEFAULT as T,
-      (c) => (frozenClass.create as (initializer: AnyRecord) => T)(c),
-      () => new mutableCtor(),
-    );
-  }
-
   constructor(
     readonly defaultValue: T,
     readonly createFn: (initializer: AnyRecord) => T,
@@ -2105,19 +2100,17 @@ class StructSerializerImpl<T>
     return this.newMutableFn(initializer);
   }
 
-  registerFields(fields: readonly _StructFieldInput[]) {
-    for (const f of fields) {
-      const serializer = f[3] as InternalSerializer;
-      const field = new StructFieldImpl<T>(f[0], f[1], f[2], serializer);
-      const { number } = field;
+  registerFields(fields: ReadonlyArray<StructFieldImpl<T>>) {
+    for (const field of fields) {
+      const { name, number, property } = field;
       this.fields.push(field);
       this.slots[number] = field;
-      this.fieldMapping[field.name] = field;
-      this.fieldMapping[field.property] = field;
+      this.fieldMapping[name] = field;
+      this.fieldMapping[property] = field;
       this.fieldMapping[number] = field;
-      this.initializerTemplate[field.property] = (
-        this.defaultValue as AnyRecord
-      )[field.property];
+      this.initializerTemplate[property] = (this.defaultValue as AnyRecord)[
+        field.property
+      ];
     }
     // Removed numbers count as recognized slots.
     this.recognizedSlots =
@@ -2139,10 +2132,6 @@ class StructSerializerImpl<T>
   }
 }
 
-interface EnumConstantFieldImpl<Enum> extends EnumConstantField<Enum> {
-  readonly serializer?: undefined;
-}
-
 class UnrecognizedEnum {
   constructor(
     readonly token: Symbol,
@@ -2151,6 +2140,10 @@ class UnrecognizedEnum {
   ) {
     Object.freeze(this);
   }
+}
+
+interface EnumConstantFieldImpl<Enum> extends EnumConstantField<Enum> {
+  readonly serializer?: undefined;
 }
 
 class EnumValueFieldImpl<Enum, Value = unknown> {
@@ -2185,26 +2178,17 @@ class EnumValueFieldImpl<Enum, Value = unknown> {
   }
 }
 
-class EnumSerializerImpl<T>
-  extends AbstractRecordSerializer<T, _EnumFieldInput<T>>
+class EnumSerializerImpl<T = unknown>
+  extends AbstractRecordSerializer<T, EnumFieldImpl<T>>
   implements EnumDescriptor<T>
 {
-  static create<T>(enumClass: AnyRecord): EnumSerializerImpl<T> {
-    return new EnumSerializerImpl<T>(enumClass.UNKNOWN as T, (i) =>
-      (enumClass.create as (o: unknown) => T)(i),
-    );
-  }
-
-  constructor(
-    readonly defaultValue: T,
-    private readonly createFn: (
-      o: { kind: string; value: unknown } | UnrecognizedEnum,
-    ) => T,
-  ) {
+  constructor(readonly createFn: (initializer: unknown) => T) {
     super();
+    this.defaultValue = createFn("?");
   }
 
   readonly kind = "enum";
+  readonly defaultValue: T;
   readonly fields: EnumFieldImpl<T>[] = [];
   private readonly fieldMapping: { [key: string | number]: EnumFieldImpl<T> } =
     {};
@@ -2390,21 +2374,8 @@ class EnumSerializerImpl<T>
     return this.fieldMapping[key]!;
   }
 
-  registerFields(fields: readonly _EnumFieldInput<T>[]): void {
-    for (const f of fields) {
-      let field: EnumFieldImpl<T>;
-      const constantOrSerializer = f[2];
-      if (constantOrSerializer instanceof AbstractSerializer) {
-        const serializer =
-          constantOrSerializer as InternalSerializer as InternalSerializer<T>;
-        field = new EnumValueFieldImpl(f[0], f[1], serializer, this.createFn!);
-      } else {
-        field = {
-          name: f[0],
-          number: f[1],
-          constant: constantOrSerializer as T,
-        };
-      }
+  registerFields(fields: ReadonlyArray<EnumFieldImpl<T>>): void {
+    for (const field of fields) {
       this.fields.push(field);
       this.fieldMapping[field.name] = field;
       this.fieldMapping[field.number] = field;
@@ -2451,6 +2422,9 @@ function freezeDeeply(o: unknown): void {
   if (!(o instanceof Object)) {
     return;
   }
+  if (o instanceof _FrozenBase || o instanceof _EnumBase) {
+    return;
+  }
   if (o instanceof AbstractRecordSerializer && !o.initialized) {
     return;
   }
@@ -2467,40 +2441,70 @@ function freezeDeeply(o: unknown): void {
 // Frozen arrays
 // =============================================================================
 
-// We add the DEEPLY_FROZEN property to arrays which we know only contain frozen
-// items. This allows us to avoid making copies in some cases.
-const DEEPLY_FROZEN: unique symbol = Symbol();
-
-// We add the MUTABLE property to arrays which were created within the
-// implementation of a mutableX getter.
-const MUTABLE: unique symbol = Symbol();
-
-interface MaybeDeeplyFrozen {
-  [DEEPLY_FROZEN]?: true;
+interface FrozenArrayInfo {
+  keyFnToIndexing?: Map<unknown, Map<unknown, unknown>>;
 }
 
-interface MaybeMutable {
-  [MUTABLE]?: true;
-}
-
-const ARRAY_PROPERTY: Readonly<PropertyDescriptor> = {
-  value: true,
-  writable: false,
-};
+const frozenArrayRegistry = new WeakMap<
+  ReadonlyArray<unknown>,
+  FrozenArrayInfo
+>();
 
 function freezeArray<T>(array: readonly T[]): readonly T[] {
-  return Object.freeze(
-    Object.defineProperty(array, DEEPLY_FROZEN, ARRAY_PROPERTY),
+  if (!frozenArrayRegistry.has(array)) {
+    frozenArrayRegistry.set(Object.freeze(array), {});
+  }
+  return array;
+}
+
+export const _EMPTY_ARRAY = Object.freeze([]);
+
+export function _toFrozenArray<T, Initializer>(
+  initializers: readonly Initializer[],
+  itemToFrozenFn?: (item: Initializer) => T,
+): readonly T[] {
+  if (!initializers.length) {
+    return _EMPTY_ARRAY;
+  }
+  if (frozenArrayRegistry.has(initializers)) {
+    // No need to make a copy: the given array is already deeply-frozen.
+    return initializers as unknown as readonly T[];
+  }
+  const ret = Object.freeze(
+    itemToFrozenFn
+      ? initializers.map(itemToFrozenFn)
+      : (initializers.slice() as unknown as readonly T[]),
   );
+  frozenArrayRegistry.set(ret, {});
+  return ret;
 }
 
 // =============================================================================
-// Internal functions classes used by generated code
+// Shared implementation of generated classes
 // =============================================================================
 
 export declare const _INITIALIZER: unique symbol;
 
+const PRIVATE_KEY: unique symbol = Symbol();
+
+function forPrivateUseError(t: unknown): Error {
+  const clazz = Object.getPrototypeOf(t).constructor as AnyRecord;
+  const { qualifiedName } = clazz.SERIALIZER as StructDescriptor;
+  return Error(
+    [
+      "Do not call the constructor directly; ",
+      `instead, call ${qualifiedName}.create(...)`,
+    ].join(""),
+  );
+}
+
 export abstract class _FrozenBase {
+  protected constructor(privateKey: Symbol) {
+    if (privateKey !== PRIVATE_KEY) {
+      throw forPrivateUseError(this);
+    }
+  }
+
   toMutable(): unknown {
     return new (Object.getPrototypeOf(this).constructor.Mutable)(this);
   }
@@ -2516,28 +2520,22 @@ export abstract class _FrozenBase {
   declare [_INITIALIZER]: unknown;
 }
 
-export abstract class _MutableBase {
+abstract class MutableBase {
   toMutable(): this {
     return this;
-  }
-
-  toString(): string {
-    const frozen = new (Object.getPrototypeOf(this).constructor)().toFrozen();
-    const serializer = Object.getPrototypeOf(frozen).constructor
-      .SERIALIZER as InternalSerializer<_FrozenBase>;
-    return serializer.toJsonCode(
-      this as unknown as Freezable<_FrozenBase>,
-      "readable",
-    );
   }
 }
 
 export abstract class _EnumBase {
-  constructor(
+  protected constructor(
+    privateKey: Symbol,
     readonly kind: string,
     readonly value?: unknown,
     unrecognized?: UnrecognizedEnum,
   ) {
+    if (privateKey !== PRIVATE_KEY) {
+      throw forPrivateUseError(this);
+    }
     if (unrecognized) {
       if (!(unrecognized instanceof UnrecognizedEnum)) {
         throw new TypeError();
@@ -2547,56 +2545,12 @@ export abstract class _EnumBase {
     Object.freeze(this);
   }
 
-  static create(initializer: unknown): unknown {
-    if (initializer instanceof this) {
-      return initializer;
-    }
-    const clazz = this as unknown as { [_: string]: unknown } & (new (
-      kind: string,
-      value: unknown,
-      unrecognized?: UnrecognizedEnum,
-    ) => unknown);
-    if (typeof initializer === "string") {
-      switch (initializer) {
-        case "?":
-          initializer = "UNKNOWN";
-          break;
-        case "UNKNOWN":
-          initializer = "UNKNOWN_";
-          break;
-      }
-      const maybeResult = clazz[initializer as string];
-      if (maybeResult instanceof this) {
-        return maybeResult;
-      }
-      throw new Error(`Constant not found: ${initializer}`);
-    }
-    if (initializer instanceof UnrecognizedEnum) {
-      return new clazz("?", undefined, initializer);
-    }
-    const kind = (initializer as { kind: string }).kind;
-    if (kind === undefined) {
-      throw new Error("Missing entry: kind");
-    }
-    const createValue = clazz._createValue as (_: unknown) => unknown;
-    const value = createValue(initializer);
-    if (value === undefined) {
-      throw new Error(`Value field not found: ${kind}`);
-    }
-    return new clazz(kind, value);
-  }
-
-  protected static _createValue(initializer: unknown): unknown {
-    return undefined;
-  }
-
   toString(): string {
     return toStringImpl(this);
   }
 }
 
-// The TypeScript compile is not happy if we define this getter within the
-// `_EnumBase` class definition.
+// The TypeScript compiler complains if we define the property within the class.
 Object.defineProperty(_EnumBase.prototype, "union", {
   get: function () {
     return this;
@@ -2609,102 +2563,394 @@ function toStringImpl<T>(value: T): string {
   return serializer.toJsonCode(value, "readable");
 }
 
-export const _EMPTY_ARRAY = freezeArray([]);
+// =============================================================================
+// Module classes initialization
+// =============================================================================
 
-export function _identity<T>(arg: T): T {
-  return arg;
+interface StructSpec {
+  kind: "struct";
+  ctor: { new (privateKey: Symbol): unknown };
+  initFn: (target: unknown, initializer: unknown) => void;
+  name: string;
+  parentCtor?: { new (): unknown };
+  fields: readonly StructFieldSpec[];
+  removedNumbers?: readonly number[];
 }
 
-export function _toFrozenArray<T, Initializer>(
-  initializers: readonly Initializer[],
-  itemToFrozenFn: (item: Initializer) => T,
-): readonly T[] {
-  if ((initializers as MaybeDeeplyFrozen)[DEEPLY_FROZEN]) {
-    return initializers as unknown as readonly T[];
-  }
-  if (!initializers.length) {
-    return _EMPTY_ARRAY;
-  }
-  return freezeArray(
-    itemToFrozenFn === _identity
-      ? (initializers.slice() as unknown as readonly T[])
-      : initializers.map(itemToFrozenFn),
-  );
+interface StructFieldSpec {
+  name: string;
+  property: string;
+  number: number;
+  type: TypeSpec;
+  mutableGetter?: string;
+  indexable?: IndexableSpec;
 }
 
-export function _toFrozenOrMutableArray<T, Initializer>(
-  initializers: readonly Initializer[],
-  itemToFrozenFn?: (item: Initializer) => T,
-): T[] {
-  if ((initializers as MaybeDeeplyFrozen)[DEEPLY_FROZEN]) {
-    return initializers as unknown as T[];
-  }
-  return itemToFrozenFn === _identity
-    ? initializers.map(itemToFrozenFn)
-    : (initializers.slice() as unknown as T[]);
+interface IndexableSpec {
+  searchMethod: string;
+  keyFn: (v: unknown) => unknown;
 }
 
-export function _toMutableArray<T>(arg: readonly T[]): T[] {
-  if ((arg as MaybeMutable)[MUTABLE]) {
-    // Safe to cast the array.
-    return arg as T[];
-  }
-  // Make a copy of the array, and add the MUTABLE property to the copy.
-  return Object.defineProperty(arg.slice(), MUTABLE, ARRAY_PROPERTY);
+interface EnumSpec<Enum = unknown> {
+  kind: "enum";
+  ctor: {
+    new (
+      privateKey: Symbol,
+      kind: string,
+      value?: unknown,
+      unrecognized?: UnrecognizedEnum,
+    ): Enum;
+  };
+  createValueFn?: (initializer: unknown) => unknown;
+  name: string;
+  parentCtor?: { new (): unknown };
+  fields: EnumFieldSpec[];
+  removedNumbers?: readonly number[];
 }
 
-export function _newStructSerializer<T extends _FrozenBase>(
-  defaultValue: T,
-): Serializer<T> {
-  const clazz: AnyRecord = Object.getPrototypeOf(defaultValue).constructor;
-  return StructSerializerImpl.create<T>(clazz);
+interface EnumFieldSpec {
+  name: string;
+  number: number;
+  type?: TypeSpec;
 }
 
-export function _newEnumSerializer<T extends _EnumBase>(
-  defaultValue: T,
-): Serializer<T> {
-  const clazz: AnyRecord = Object.getPrototypeOf(defaultValue).constructor;
-  return EnumSerializerImpl.create<T>(clazz);
-}
+type TypeSpec =
+  | {
+      kind: "nullable";
+      other: TypeSpec;
+    }
+  | {
+      kind: "array";
+      item: TypeSpec;
+    }
+  | {
+      kind: "record";
+      ctor: { new (): unknown };
+    }
+  | {
+      kind: "primitive";
+      primitive: keyof PrimitiveTypes;
+    };
 
-export type _StructFieldInput = [string, string, number, Serializer<unknown>];
-
-export function _initStructSerializer<T extends _FrozenBase>(
-  serializer: Serializer<T>,
-  name: string,
-  qualifiedName: string,
+export function _initModuleClasses(
   modulePath: string,
-  parentType: StructDescriptor | EnumDescriptor | undefined,
-  fields: readonly _StructFieldInput[],
-  removedNumbers: readonly number[],
+  records: ReadonlyArray<StructSpec | EnumSpec>,
 ) {
-  (serializer as StructSerializerImpl<T>).init(
-    name,
-    qualifiedName,
-    modulePath,
-    parentType,
-    fields,
-    removedNumbers,
-  );
+  const privateKey = PRIVATE_KEY;
+
+  // The UNKNOWN field is common to all enums.
+  const unknownFieldSpec: EnumFieldSpec = {
+    name: "?",
+    number: 0,
+  };
+
+  // First loop: add a SERIALIZER property to every record class.
+  for (const record of records) {
+    const clazz = record.ctor as unknown as AnyRecord;
+    switch (record.kind) {
+      case "struct": {
+        const { ctor, initFn } = record;
+        // Create the DEFAULT value. It will be initialized in a second loop.
+        // To see why we can't initialize it in the first loop, consider this
+        // example:
+        //   struct Foo { bar: Bar; }
+        //   struct Bar { foo: Foo; }
+        // The default value for Foo must contain a reference to the default
+        // value for Bar, and the default value for Bar also needs to contain
+        // a reference to the default value for Foo.
+        clazz.DEFAULT = new ctor(privateKey);
+        // Expose the mutable class as a static property of the frozen class.
+        const mutableCtor = makeMutableClassForRecord(record, clazz.DEFAULT);
+        clazz.Mutable = mutableCtor;
+        // Define the 'create' static factory function.
+        const createFn = (initializer: unknown) => {
+          if (initializer instanceof ctor) {
+            return initializer;
+          }
+          const ret = new ctor(privateKey);
+          initFn(ret, initializer);
+          if ((initializer as AnyRecord)["^"]) {
+            (ret as AnyRecord)["^"] = (initializer as AnyRecord)["^"];
+          }
+          return Object.freeze(ret);
+        };
+        clazz.create = createFn;
+        // Create the SERIALIZER. It will be initialized in a second loop.
+        clazz.SERIALIZER = new StructSerializerImpl(
+          clazz.DEFAULT,
+          createFn as (initializer: AnyRecord) => unknown,
+          (i) => new mutableCtor() as Freezable<unknown>,
+        );
+        break;
+      }
+      case "enum": {
+        // Create the constants.
+        // Prepend the UNKNOWN field to the array of fields specified from the
+        // generated code.
+        record.fields = [unknownFieldSpec].concat(record.fields);
+        for (const field of record.fields) {
+          if (field.type) {
+            continue;
+          }
+          let property = enumConstantNameToProperty(field.name);
+          clazz[property] = new record.ctor(PRIVATE_KEY, field.name);
+        }
+        // Define the 'create' static factory function.
+        const createFn = makeCreateEnumFunction(record);
+        clazz.create = createFn;
+        // Create the SERIALIZER. It will be initialized in a second loop.
+        clazz.SERIALIZER = new EnumSerializerImpl(createFn);
+        break;
+      }
+    }
+    // If the record is nested, expose the record class as a static property of
+    // the parent class.
+    if (record.parentCtor) {
+      (record.parentCtor as unknown as AnyRecord)[record.name] = record.ctor;
+    }
+  }
+
+  // Second loop: initialize the serializer of every record, initialize the
+  // default value of every struct, and freeze every class so new properties
+  // can't be added to it.
+  for (const record of records) {
+    const clazz = record.ctor as unknown as AnyRecord;
+    const parentTypeDescriptor = (record.parentCtor as unknown as AnyRecord)
+      ?.SERIALIZER as StructDescriptor | EnumDescriptor | undefined;
+    switch (record.kind) {
+      case "struct": {
+        // Initializer SERIALIZER.
+        const fields = record.fields.map(
+          (f) =>
+            new StructFieldImpl(
+              f.name,
+              f.property,
+              f.number,
+              getSerializerForType(f.type) as InternalSerializer,
+            ),
+        );
+        const serializer = clazz.SERIALIZER as StructSerializerImpl;
+        serializer.init(
+          record.name,
+          modulePath,
+          parentTypeDescriptor,
+          fields,
+          record.removedNumbers || [],
+        );
+        // Initialize DEFAULT.
+        const { DEFAULT } = clazz;
+        record.initFn(DEFAULT as AnyRecord, {});
+        Object.freeze(DEFAULT);
+        // Define the mutable getters in the Mutable class.
+        const mutableCtor = clazz.Mutable as new (i: unknown) => unknown;
+        for (const field of record.fields) {
+          if (!field.mutableGetter) {
+            continue;
+          }
+          Object.defineProperty(mutableCtor.prototype, field.mutableGetter, {
+            get: makeMutableGetterFn(field),
+          });
+        }
+        // Define the search methods in the frozen class.
+        for (const field of record.fields) {
+          if (!field.indexable) {
+            continue;
+          }
+          record.ctor.prototype[field.indexable.searchMethod] =
+            makeSearchMethod(field);
+        }
+        // Freeze the frozen class and the mutable class.
+        Object.freeze(record.ctor);
+        Object.freeze(record.ctor.prototype);
+        Object.freeze(clazz.Mutable);
+        Object.freeze((clazz.Mutable as AnyRecord).prototype);
+        break;
+      }
+      case "enum": {
+        const serializer = clazz.SERIALIZER as EnumSerializerImpl;
+        const fields = record.fields.map((f) =>
+          f.type
+            ? new EnumValueFieldImpl(
+                f.name,
+                f.number,
+                getSerializerForType(f.type) as InternalSerializer,
+                serializer.createFn,
+              )
+            : {
+                name: f.name,
+                number: f.number,
+                constant: clazz[enumConstantNameToProperty(f.name)],
+              },
+        );
+        serializer.init(
+          record.name,
+          modulePath,
+          parentTypeDescriptor,
+          fields,
+          record.removedNumbers || [],
+        );
+        // Freeze the enum class.
+        Object.freeze(record.ctor);
+        Object.freeze(record.ctor.prototype);
+        break;
+      }
+    }
+  }
 }
 
-export type _EnumFieldInput<T> = [string, number, T | Serializer<unknown>];
+function enumConstantNameToProperty(name: string): string {
+  switch (name) {
+    case "?":
+      return "UNKNOWN";
+    case "SERIALIZER":
+      return "SERIALIZER_";
+    case "UNKNOWN":
+      return "UNKNOWN_";
+  }
+  return name;
+}
 
-export function _initEnumSerializer<T extends _EnumBase>(
-  serializer: Serializer<T>,
-  name: string,
-  qualifiedName: string,
-  modulePath: string,
-  parentType: StructDescriptor | EnumDescriptor | undefined,
-  fields: ReadonlyArray<_EnumFieldInput<T>>,
-  removedNumbers: readonly number[],
-) {
-  (serializer as EnumSerializerImpl<T>).init(
-    name,
-    qualifiedName,
-    modulePath,
-    parentType,
-    fields,
-    removedNumbers,
-  );
+function makeCreateEnumFunction(
+  enumSpec: EnumSpec,
+): (initializer: unknown) => unknown {
+  const { ctor, createValueFn } = enumSpec;
+  const createValue = createValueFn || (() => undefined);
+  const privateKey = PRIVATE_KEY;
+  return (initializer: unknown) => {
+    if (initializer instanceof ctor) {
+      return initializer;
+    }
+    if (typeof initializer === "string") {
+      const maybeResult = (ctor as unknown as AnyRecord)[
+        enumConstantNameToProperty(initializer)
+      ];
+      if (maybeResult instanceof ctor) {
+        return maybeResult;
+      }
+      throw new Error(`Constant not found: ${initializer}`);
+    }
+    if (initializer instanceof UnrecognizedEnum) {
+      return new ctor(privateKey, "?", undefined, initializer);
+    }
+    const kind = (initializer as { kind: string }).kind;
+    if (kind === undefined) {
+      throw new Error("Missing entry: kind");
+    }
+    const value = createValue(initializer);
+    if (value === undefined) {
+      throw new Error(`Value field not found: ${kind}`);
+    }
+    return new ctor(privateKey, kind, value);
+  };
+}
+
+function makeMutableClassForRecord(
+  structSpec: StructSpec,
+  defaultFrozen: unknown,
+): new (initializer?: unknown) => unknown {
+  const { ctor: frozenCtor, initFn } = structSpec;
+  const frozenClass = frozenCtor as unknown as AnyRecord;
+  class Mutable extends MutableBase {
+    constructor(initializer: unknown = defaultFrozen) {
+      super();
+      initFn(this, initializer);
+      if ((initializer as AnyRecord)["^"]) {
+        (this as AnyRecord)["^"] = (initializer as AnyRecord)["^"];
+      }
+      Object.seal(this);
+    }
+
+    toFrozen(): unknown {
+      return (frozenClass.create as (i: unknown) => unknown)(this);
+    }
+
+    toString(): string {
+      const serializer = frozenClass.SERIALIZER as Serializer<unknown>;
+      return serializer.toJsonCode(this, "readable");
+    }
+  }
+  return Mutable;
+}
+
+function getSerializerForType(type: TypeSpec): Serializer<unknown> {
+  switch (type.kind) {
+    case "array":
+      return arraySerializer(getSerializerForType(type.item));
+    case "nullable":
+      return nullableSerializer(getSerializerForType(type.other));
+    case "primitive":
+      return primitiveSerializer(type.primitive);
+    case "record":
+      return (type.ctor as unknown as AnyRecord)
+        .SERIALIZER as Serializer<unknown>;
+  }
+}
+
+function makeMutableGetterFn(field: StructFieldSpec): () => unknown {
+  let { property, type } = field;
+  switch (type.kind) {
+    case "array": {
+      class Class {
+        static ret(): unknown {
+          let value = this[property] as readonly unknown[];
+          if (!Object.isFrozen(value)) {
+            return value;
+          }
+          return (this[property] = [...value]);
+        }
+
+        static [_: string]: unknown;
+      }
+      return Class.ret;
+    }
+    case "record": {
+      const mutableCtor = (type.ctor as unknown as AnyRecord).Mutable as new (
+        i: unknown,
+      ) => unknown;
+      class Class {
+        static ret(): unknown {
+          let value = this[property];
+          if (value instanceof mutableCtor) {
+            return value;
+          }
+          return (this[property] = new mutableCtor(value));
+        }
+
+        static [_: string]: unknown;
+      }
+      return Class.ret;
+    }
+    default: {
+      throw new Error();
+    }
+  }
+}
+
+function makeSearchMethod(field: StructFieldSpec): (key: unknown) => unknown {
+  const { property } = field;
+  const { keyFn } = field.indexable!;
+  class Class {
+    ret(key: unknown): unknown {
+      const array = this[property] as ReadonlyArray<unknown>;
+      const frozenArrayInfo = frozenArrayRegistry.get(array)!;
+      let { keyFnToIndexing } = frozenArrayInfo;
+      if (!keyFnToIndexing) {
+        frozenArrayInfo.keyFnToIndexing = keyFnToIndexing = //
+          new Map<unknown, Map<unknown, unknown>>();
+      }
+      let keyToValue = keyFnToIndexing.get(keyFn);
+      if (keyToValue === undefined) {
+        // The array has not been indexed yet. Index it.
+        keyToValue = new Map<unknown, unknown>();
+        for (const v of array) {
+          keyToValue.set(keyFn(v), v);
+        }
+        keyFnToIndexing.set(keyFn, keyToValue);
+      }
+      return keyToValue.get(key);
+    }
+
+    [_: string]: unknown;
+  }
+  return Class.prototype.ret;
 }
