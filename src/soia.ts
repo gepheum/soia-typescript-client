@@ -2920,7 +2920,7 @@ function makeMutableGetterFn(field: StructFieldSpec): () => unknown {
           }
           const copy = [...value];
           arraysReturnedByMutableGetters.set(copy, this);
-          return this[property] = copy;
+          return (this[property] = copy);
         }
 
         static [_: string]: unknown;
