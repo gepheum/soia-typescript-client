@@ -782,26 +782,26 @@ describe("bytes serializer", () => {
   tester.deserializeZeroAndAssert((s) => s.byteLength === 0);
 });
 
-describe("nullable serializer", () => {
+describe("optional serializer", () => {
   const otherSerializer = soia.primitiveSerializer("int32");
-  const serializer = soia.nullableSerializer(otherSerializer);
+  const serializer = soia.optionalSerializer(otherSerializer);
   it("is idempotent", () => {
-    expect(soia.nullableSerializer(serializer)).toMatch(serializer);
+    expect(soia.optionalSerializer(serializer)).toMatch(serializer);
   });
 
   const tester = new SerializerTester(serializer);
 
   it("#typeDescriptor", () => {
     expect(serializer.typeDescriptor).toMatch({
-      kind: "nullable",
-      otherType: otherSerializer.typeDescriptor,
+      kind: "optional",
+      valueType: otherSerializer.typeDescriptor,
     });
   });
 
   it("TypeDescript#asJson()", () => {
     expect(serializer.typeDescriptor.asJson()).toMatch({
       type: {
-        kind: "nullable",
+        kind: "optional",
         other: {
           kind: "primitive",
           primitive: "int32",

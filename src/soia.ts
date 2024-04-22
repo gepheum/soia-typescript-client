@@ -397,12 +397,12 @@ export function arraySerializer<Item>(
 }
 
 /** Returns a serializer of nullable `T`s. */
-export function nullableSerializer<T>(
+export function optionalSerializer<T>(
   other: Serializer<T>,
 ): Serializer<T | null> {
-  return other instanceof NullableSerializerImpl
+  return other instanceof OptionalSerializerImpl
     ? other
-    : new NullableSerializerImpl(other as InternalSerializer<T>);
+    : new OptionalSerializerImpl(other as InternalSerializer<T>);
 }
 
 /**
@@ -410,10 +410,10 @@ export function nullableSerializer<T>(
  * type. Enables reflective programming.
  *
  * Every `TypeDescriptor` instance has a `kind` field which can take one of
- * these 5 values: `"primitive"`, `"nullable"`, `"array"`, `"struct"`, `"enum"`.
+ * these 5 values: `"primitive"`, `"optional"`, `"array"`, `"struct"`, `"enum"`.
  */
 export type TypeDescriptor<T = unknown> =
-  | NullableDescriptor<T>
+  | OptionalDescriptor<T>
   | ArrayDescriptor<T>
   | StructDescriptor<T>
   | EnumDescriptor<T>
@@ -473,13 +473,13 @@ export interface PrimitiveTypes {
 }
 
 /**
- * Describes a nullable type. In a `.soia` file, a nullable type is represented
- * with a question mark at the end of another type.
+ * Describes an optional type. In a `.soia` file, an optional type is
+ * represented with a question mark at the end of another type.
  */
-export interface NullableDescriptor<T> extends TypeDescriptorBase {
-  readonly kind: "nullable";
-  /** Describes the other (non-nullable) type. */
-  readonly otherType: TypeDescriptor<NonNullable<T>>;
+export interface OptionalDescriptor<T> extends TypeDescriptorBase {
+  readonly kind: "optional";
+  /** Describes the other (non-optional) type. */
+  readonly valueType: TypeDescriptor<NonNullable<T>>;
 }
 
 /** Describes an array type. */
@@ -764,7 +764,7 @@ type TypeDefinition = {
 /** A type in the JSON representation of a `TypeDescriptor`. */
 type TypeSignature =
   | {
-      kind: "nullable";
+      kind: "optional";
       other: TypeSignature;
     }
   | {
@@ -1117,8 +1117,8 @@ export function parseTypeDescriptor(json: Json): TypeDescriptor {
     switch (ts.kind) {
       case "array":
         return new ArraySerializerImpl(parse(ts.item));
-      case "nullable":
-        return new NullableSerializerImpl(parse(ts.other));
+      case "optional":
+        return new OptionalSerializerImpl(parse(ts.other));
       case "primitive":
         return primitiveSerializer(ts.primitive) as InternalSerializer;
       case "record":
@@ -1664,15 +1664,15 @@ class ArraySerializerImpl<Item>
   }
 }
 
-class NullableSerializerImpl<Other>
+class OptionalSerializerImpl<Other>
   extends AbstractSerializer<Other | null>
-  implements NullableDescriptor<Other | null>
+  implements OptionalDescriptor<Other | null>
 {
   constructor(readonly otherSerializer: InternalSerializer<Other>) {
     super();
   }
 
-  readonly kind = "nullable";
+  readonly kind = "optional";
   readonly defaultValue = null;
 
   toJson(input: Other, flavor?: JsonFlavor): Json {
@@ -1704,7 +1704,7 @@ class NullableSerializerImpl<Other>
     return input === null;
   }
 
-  get otherType(): TypeDescriptor<NonNullable<Other>> {
+  get valueType(): TypeDescriptor<NonNullable<Other>> {
     return this.otherSerializer.typeDescriptor as TypeDescriptor<
       NonNullable<Other>
     >;
@@ -1712,7 +1712,7 @@ class NullableSerializerImpl<Other>
 
   get typeSignature(): TypeSignature {
     return {
-      kind: "nullable",
+      kind: "optional",
       other: this.otherSerializer.typeSignature,
     };
   }
@@ -2624,7 +2624,7 @@ interface EnumFieldSpec {
 
 type TypeSpec =
   | {
-      kind: "nullable";
+      kind: "optional";
       other: TypeSpec;
     }
   | {
@@ -2881,8 +2881,8 @@ function getSerializerForType(type: TypeSpec): Serializer<unknown> {
   switch (type.kind) {
     case "array":
       return arraySerializer(getSerializerForType(type.item));
-    case "nullable":
-      return nullableSerializer(getSerializerForType(type.other));
+    case "optional":
+      return optionalSerializer(getSerializerForType(type.other));
     case "primitive":
       return primitiveSerializer(type.primitive);
     case "record":
