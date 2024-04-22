@@ -479,7 +479,7 @@ export interface PrimitiveTypes {
 export interface OptionalDescriptor<T> extends TypeDescriptorBase {
   readonly kind: "optional";
   /** Describes the other (non-optional) type. */
-  readonly valueType: TypeDescriptor<NonNullable<T>>;
+  readonly otherType: TypeDescriptor<NonNullable<T>>;
 }
 
 /** Describes an array type. */
@@ -1704,7 +1704,7 @@ class OptionalSerializerImpl<Other>
     return input === null;
   }
 
-  get valueType(): TypeDescriptor<NonNullable<Other>> {
+  get otherType(): TypeDescriptor<NonNullable<Other>> {
     return this.otherSerializer.typeDescriptor as TypeDescriptor<
       NonNullable<Other>
     >;

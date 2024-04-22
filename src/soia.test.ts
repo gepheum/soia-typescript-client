@@ -794,7 +794,7 @@ describe("optional serializer", () => {
   it("#typeDescriptor", () => {
     expect(serializer.typeDescriptor).toMatch({
       kind: "optional",
-      valueType: otherSerializer.typeDescriptor,
+      otherType: otherSerializer.typeDescriptor,
     });
   });
 
