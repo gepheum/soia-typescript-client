@@ -2533,12 +2533,6 @@ export abstract class _FrozenBase {
   declare [_INITIALIZER]: unknown;
 }
 
-abstract class MutableBase {
-  toMutable(): this {
-    return this;
-  }
-}
-
 export abstract class _EnumBase {
   protected constructor(
     privateKey: Symbol,
@@ -2862,9 +2856,8 @@ function makeMutableClassForRecord(
 ): new (initializer?: unknown) => unknown {
   const { ctor: frozenCtor, initFn } = structSpec;
   const frozenClass = frozenCtor as unknown as AnyRecord;
-  class Mutable extends MutableBase {
+  class Mutable {
     constructor(initializer: unknown = defaultFrozen) {
-      super();
       initFn(this, initializer);
       if ((initializer as AnyRecord)["^"]) {
         (this as AnyRecord)["^"] = (initializer as AnyRecord)["^"];
