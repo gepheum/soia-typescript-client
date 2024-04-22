@@ -2160,14 +2160,7 @@ class EnumValueFieldImpl<Enum, Value = unknown> {
     readonly number: number,
     readonly serializer: InternalSerializer<Value>,
     private createFn: (initializer: { kind: string; value: unknown }) => Enum,
-  ) {
-    this.wrappedDefault = createFn({
-      kind: name,
-      value: serializer.defaultValue,
-    });
-  }
-
-  readonly wrappedDefault: Enum;
+  ) {}
 
   get type(): TypeDescriptor<Value> {
     return this.serializer.typeDescriptor;
@@ -2247,7 +2240,10 @@ class EnumSerializerImpl<T = unknown>
           ? this.defaultValue
           : this.createFn(new UnrecognizedEnum(this.token, copyJson(json)));
       }
-      return field.serializer ? field.wrappedDefault : field.constant;
+      if (field.serializer) {
+        throw new Error(`refers to a value field: ${json}`);
+      }
+      return field.constant;
     }
     let fieldKey: number | string;
     let valueAsJson: Json;
@@ -2272,7 +2268,7 @@ class EnumSerializerImpl<T = unknown>
     }
     const { serializer } = field;
     if (!serializer) {
-      return field.constant;
+      throw new Error(`refers to a constant field: ${json}`);
     }
     return field.wrap(serializer.fromJson(valueAsJson));
   }
@@ -2333,10 +2329,9 @@ class EnumSerializerImpl<T = unknown>
         }
       }
       if (field.serializer) {
-        return field.wrappedDefault;
-      } else {
-        return field.constant;
+        throw new Error(`refers to a value field: ${number}`);
       }
+      return field.constant;
     } else {
       ++stream.offset;
       const number =
@@ -2356,12 +2351,11 @@ class EnumSerializerImpl<T = unknown>
           );
         }
       }
-      if (field.serializer) {
-        return field.wrap(field.serializer.decode(stream));
-      } else {
-        decodeUnused(stream);
-        return field.constant;
+      const { serializer } = field;
+      if (!serializer) {
+        throw new Error(`refers to a constant field: ${number}`);
       }
+      return field.wrap(serializer.decode(stream));
     }
   }
 
