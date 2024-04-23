@@ -1405,8 +1405,8 @@ class Uint64Serializer extends AbstractBigIntSerializer<"uint64"> {
 }
 
 type TimestampReadableJson = {
-  unixMillis: number;
-  formatted: string;
+  "unix_millis": number;
+  "formatted": string;
 };
 
 class TimestampSerializer extends AbstractPrimitiveSerializer<"timestamp"> {
@@ -1419,8 +1419,8 @@ class TimestampSerializer extends AbstractPrimitiveSerializer<"timestamp"> {
   ): number | TimestampReadableJson {
     return flavor === "readable"
       ? {
-          unixMillis: input.unixMillis,
-          formatted: input.toDate().toISOString(),
+          "unix_millis": input.unixMillis,
+          "formatted": input.toDate().toISOString(),
         }
       : input.unixMillis;
   }
@@ -1429,7 +1429,7 @@ class TimestampSerializer extends AbstractPrimitiveSerializer<"timestamp"> {
     return Timestamp.fromUnixMillis(
       typeof json === "number"
         ? json
-        : (json as TimestampReadableJson).unixMillis,
+        : (json as TimestampReadableJson)["unix_millis"],
     );
   }
 
