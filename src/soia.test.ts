@@ -110,8 +110,8 @@ describe("timestamp serializer", () => {
     {
       denseJson: 0,
       readableJson: {
-        "unix_millis": 0,
-        "formatted": "1970-01-01T00:00:00.000Z",
+        unix_millis: 0,
+        formatted: "1970-01-01T00:00:00.000Z",
       },
       bytesAsBase16: "00",
     },
@@ -123,8 +123,8 @@ describe("timestamp serializer", () => {
     {
       denseJson: 1692999034586,
       readableJson: {
-        "unix_millis": 1692999034586,
-        "formatted": "2023-08-25T21:30:34.586Z",
+        unix_millis: 1692999034586,
+        formatted: "2023-08-25T21:30:34.586Z",
       },
       bytesAsBase16: "efda269b2e8a010000",
     },
@@ -136,8 +136,8 @@ describe("timestamp serializer", () => {
     {
       denseJson: -1692999034586,
       readableJson: {
-        "unix_millis": -1692999034586,
-        "formatted": "1916-05-09T02:29:25.414Z",
+        unix_millis: -1692999034586,
+        formatted: "1916-05-09T02:29:25.414Z",
       },
       bytesAsBase16: "ef26d964d175feffff",
     },

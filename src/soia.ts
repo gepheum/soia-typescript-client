@@ -1405,8 +1405,8 @@ class Uint64Serializer extends AbstractBigIntSerializer<"uint64"> {
 }
 
 type TimestampReadableJson = {
-  "unix_millis": number;
-  "formatted": string;
+  unix_millis: number;
+  formatted: string;
 };
 
 class TimestampSerializer extends AbstractPrimitiveSerializer<"timestamp"> {
@@ -1419,8 +1419,8 @@ class TimestampSerializer extends AbstractPrimitiveSerializer<"timestamp"> {
   ): number | TimestampReadableJson {
     return flavor === "readable"
       ? {
-          "unix_millis": input.unixMillis,
-          "formatted": input.toDate().toISOString(),
+          unix_millis: input.unixMillis,
+          formatted: input.toDate().toISOString(),
         }
       : input.unixMillis;
   }
@@ -1757,46 +1757,47 @@ function decodeUnused(stream: InputStream): void {
     return;
   }
   switch (wire - 232) {
-    case 0:  // uint16
-    case 4:  // uint16 - 65536
+    case 0: // uint16
+    case 4: // uint16 - 65536
       stream.offset += 2;
       break;
-    case 1:  // uint32
-    case 5:  // int32
-    case 8:  // float32
+    case 1: // uint32
+    case 5: // int32
+    case 8: // float32
       stream.offset += 4;
       break;
-    case 2:  // uint64
-    case 6:  // int64
-    case 7:  // uint64 timestamp
-    case 9:  // float64
+    case 2: // uint64
+    case 6: // int64
+    case 7: // uint64 timestamp
+    case 9: // float64
       stream.offset += 8;
       break;
-    case 3:  // uint8 - 256
+    case 3: // uint8 - 256
       ++stream.offset;
       break;
-    case 11:  // string
-    case 13:  // bytes
+    case 11: // string
+    case 13: // bytes
       const length = decodeNumber(stream) as number;
       stream.offset += length;
       break;
-    case 15:  // array length==1
-    case 19:  // enum value kind==1
-    case 20:  // enum value kind==2
-    case 21:  // enum value kind==3
-    case 22:  // enum value kind==4
+    case 15: // array length==1
+    case 19: // enum value kind==1
+    case 20: // enum value kind==2
+    case 21: // enum value kind==3
+    case 22: // enum value kind==4
       decodeUnused(stream);
       break;
-    case 16:  // array length==2
-      decodeUnused(stream);
-      decodeUnused(stream);
-      break;
-    case 17:  // array length==3
-      decodeUnused(stream);
+    case 16: // array length==2
       decodeUnused(stream);
       decodeUnused(stream);
       break;
-    case 18: {  // array length==N
+    case 17: // array length==3
+      decodeUnused(stream);
+      decodeUnused(stream);
+      decodeUnused(stream);
+      break;
+    case 18: {
+      // array length==N
       const length = decodeNumber(stream);
       for (let i = 0; i < length; ++i) {
         decodeUnused(stream);
