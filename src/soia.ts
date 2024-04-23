@@ -1404,22 +1404,33 @@ class Uint64Serializer extends AbstractBigIntSerializer<"uint64"> {
   }
 }
 
+type TimestampReadableJson = {
+  unixMillis: number;
+  formatted: string;
+};
+
 class TimestampSerializer extends AbstractPrimitiveSerializer<"timestamp"> {
   readonly primitive = "timestamp";
   readonly defaultValue = Timestamp.UNIX_EPOCH;
 
-  toJson(input: Timestamp, flavor?: JsonFlavor): string | number {
+  toJson(
+    input: Timestamp,
+    flavor?: JsonFlavor,
+  ): number | TimestampReadableJson {
     return flavor === "readable"
-      ? input.toDate().toISOString()
+      ? {
+          unixMillis: input.unixMillis,
+          formatted: input.toDate().toISOString(),
+        }
       : input.unixMillis;
   }
 
   fromJson(json: Json): Timestamp {
-    return typeof json === "number"
-      ? // A numeric timestamp.
-        Timestamp.fromUnixMillis(json)
-      : // An ISO date.
-        Timestamp.from(new Date(Date.parse(json as string)));
+    return Timestamp.fromUnixMillis(
+      typeof json === "number"
+        ? json
+        : (json as TimestampReadableJson).unixMillis,
+    );
   }
 
   encode(input: Timestamp, stream: OutputStream): void {
