@@ -875,7 +875,12 @@ describe("array serializer", () => {
 
   tester.reserializeAndAssert([10, 11, 12], {
     denseJson: [10, 11, 12],
-    bytesAsBase16: "f9030a0b0c",
+    bytesAsBase16: "f90a0b0c",
+  });
+
+  tester.reserializeAndAssert([10, 11, 12, 13], {
+    denseJson: [10, 11, 12, 13],
+    bytesAsBase16: "fa040a0b0c0d",
   });
 
   tester.deserializeZeroAndAssert((a) => a.length === 0);

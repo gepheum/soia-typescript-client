@@ -1629,10 +1629,10 @@ class ArraySerializerImpl<Item>
 
   encode(input: ReadonlyArray<Item>, stream: OutputStream): void {
     const { length } = input;
-    if (length <= 2) {
+    if (length <= 3) {
       stream.writeUint8(246 + length);
     } else {
-      stream.writeUint8(249);
+      stream.writeUint8(250);
       encodeUint32(length, stream);
     }
     const { itemSerializer } = this;
@@ -1646,7 +1646,7 @@ class ArraySerializerImpl<Item>
     if (wire === 0 || wire === 246) {
       return _EMPTY_ARRAY;
     }
-    const length = wire === 249 ? (decodeNumber(stream) as number) : wire - 246;
+    const length = wire === 250 ? (decodeNumber(stream) as number) : wire - 246;
     const { itemSerializer } = this;
     const result = new Array<Item>(length);
     for (let i = 0; i < length; ++i) {
@@ -1757,42 +1757,46 @@ function decodeUnused(stream: InputStream): void {
     return;
   }
   switch (wire - 232) {
-    case 0:
-    case 4:
+    case 0:  // uint16
+    case 4:  // uint16 - 65536
       stream.offset += 2;
       break;
-    case 1:
-    case 5:
-    case 8:
+    case 1:  // uint32
+    case 5:  // int32
+    case 8:  // float32
       stream.offset += 4;
       break;
-    case 2:
-    case 6:
-    case 7:
-    case 9:
+    case 2:  // uint64
+    case 6:  // int64
+    case 7:  // uint64 timestamp
+    case 9:  // float64
       stream.offset += 8;
       break;
-    case 3:
+    case 3:  // uint8 - 256
       ++stream.offset;
       break;
-    case 11:
-    case 13:
+    case 11:  // string
+    case 13:  // bytes
       const length = decodeNumber(stream) as number;
       stream.offset += length;
       break;
-    case 15:
-    case 18:
-    case 19:
-    case 20:
-    case 21:
-    case 22:
+    case 15:  // array length==1
+    case 19:  // enum value kind==1
+    case 20:  // enum value kind==2
+    case 21:  // enum value kind==3
+    case 22:  // enum value kind==4
       decodeUnused(stream);
       break;
-    case 16:
+    case 16:  // array length==2
       decodeUnused(stream);
       decodeUnused(stream);
       break;
-    case 17: {
+    case 17:  // array length==3
+      decodeUnused(stream);
+      decodeUnused(stream);
+      decodeUnused(stream);
+      break;
+    case 18: {  // array length==N
       const length = decodeNumber(stream);
       for (let i = 0; i < length; ++i) {
         decodeUnused(stream);
@@ -2011,10 +2015,10 @@ class StructSerializerImpl<T = unknown>
       totalSlots = recognizedSlots = this.getArrayLength(input);
     }
 
-    if (totalSlots <= 2) {
+    if (totalSlots <= 3) {
       stream.writeUint8(246 + totalSlots);
     } else {
-      stream.writeUint8(249);
+      stream.writeUint8(250);
       encodeUint32(totalSlots, stream);
     }
     const { slots } = this;
@@ -2040,7 +2044,7 @@ class StructSerializerImpl<T = unknown>
     }
     const initializer = { ...this.initializerTemplate };
     const encodedSlots =
-      wire === 249 ? (decodeNumber(stream) as number) : wire - 246;
+      wire === 250 ? (decodeNumber(stream) as number) : wire - 246;
     const { slots, recognizedSlots } = this;
     // Do not read more slots than the number of recognized slots.
     for (let i = 0; i < encodedSlots && i < recognizedSlots; ++i) {
@@ -2306,8 +2310,9 @@ class EnumSerializerImpl<T = unknown>
     if (serializer) {
       // A value field.
       const value = (input as AnyRecord).value;
-      if (number < 6) {
-        stream.writeUint8(249 + number);
+      if (number < 5) {
+        // The number can't be 0 or else kind == "?".
+        stream.writeUint8(250 + number);
       } else {
         stream.writeUint8(248);
         encodeUint32(number, stream);
@@ -2346,7 +2351,7 @@ class EnumSerializerImpl<T = unknown>
     } else {
       ++stream.offset;
       const number =
-        wire === 248 ? (decodeNumber(stream) as number) : wire - 249;
+        wire === 248 ? (decodeNumber(stream) as number) : wire - 250;
       const field = this.fieldMapping[number];
       if (!field) {
         decodeUnused(stream);
