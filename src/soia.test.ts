@@ -334,11 +334,13 @@ describe("bool serializer", () => {
   });
 
   tester.reserializeAndAssert(true, {
-    denseJson: true,
+    denseJson: 1,
+    readableJson: true,
     bytesAsBase16: "01",
   });
   tester.reserializeAndAssert(false, {
-    denseJson: false,
+    denseJson: 0,
+    readableJson: false,
     bytesAsBase16: "00",
   });
   tester.deserializeZeroAndAssert((input) => input === false);

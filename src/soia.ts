@@ -1209,8 +1209,8 @@ class BoolSerializer extends AbstractPrimitiveSerializer<"bool"> {
   readonly primitive = "bool";
   readonly defaultValue = false;
 
-  toJson(input: boolean): boolean {
-    return !!input;
+  toJson(input: boolean, flavor?: JsonFlavor): boolean | number {
+    return flavor === "readable" ? !!input : input ? 1 : 0;
   }
 
   fromJson(json: Json): boolean {
