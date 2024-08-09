@@ -994,8 +994,10 @@ function encodeUint32(length: number, stream: OutputStream): void {
   } else if (length < 65536) {
     stream.writeUint8(232);
     stream.writeUint16(length);
-  } else {
+  } else if (length < 4294967296) {
     stream.writeUint32(length);
+  } else {
+    throw new Error(`max length exceeded: ${length}`);
   }
 }
 
