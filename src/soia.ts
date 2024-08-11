@@ -2102,12 +2102,12 @@ class StructSerializerImpl<T = unknown>
     }
     // It's possible for a value of type T to be equal to T.DEFAULT but to not
     // be the reference to T.DEFAULT.
-    for (const field of this.fields) {
-      if (!field.serializer.isDefault((input as AnyRecord)[field.property])) {
-        return false;
-      }
+    if ((input as AnyRecord)["^"] as UnrecognizedFields) {
+      return false;
     }
-    return true;
+    return this.fields.every(
+      (f) => !f.serializer.isDefault((input as AnyRecord)[f.property]),
+    );
   }
 
   get typeSignature(): TypeSignature {
@@ -2388,7 +2388,7 @@ class EnumSerializerImpl<T = unknown>
 
   isDefault(input: T): boolean {
     type Kinded = { kind: string };
-    return (input as Kinded).kind === "?";
+    return (input as Kinded).kind === "?" && !(input as AnyRecord)["^"];
   }
 
   getField<K extends string | number>(key: K): EnumFieldResult<T, K> {
