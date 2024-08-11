@@ -2106,7 +2106,7 @@ class StructSerializerImpl<T = unknown>
       return false;
     }
     return this.fields.every(
-      (f) => !f.serializer.isDefault((input as AnyRecord)[f.property]),
+      (f) => f.serializer.isDefault((input as AnyRecord)[f.property]),
     );
   }
 
