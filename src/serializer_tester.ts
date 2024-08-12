@@ -157,7 +157,7 @@ export class SerializerTester<T> {
   }
 }
 
-function toBase16(buffer: ArrayBuffer): string {
+export function toBase16(buffer: ArrayBuffer): string {
   return [...new Uint8Array(buffer)]
     .map((x) => x.toString(16).padStart(2, "0"))
     .join("");
