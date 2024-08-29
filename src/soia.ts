@@ -2105,8 +2105,8 @@ class StructSerializerImpl<T = unknown>
     if ((input as AnyRecord)["^"] as UnrecognizedFields) {
       return false;
     }
-    return this.fields.every(
-      (f) => f.serializer.isDefault((input as AnyRecord)[f.property]),
+    return this.fields.every((f) =>
+      f.serializer.isDefault((input as AnyRecord)[f.property]),
     );
   }
 
