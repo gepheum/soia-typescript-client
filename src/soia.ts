@@ -1393,7 +1393,9 @@ class Uint64Serializer extends AbstractBigIntSerializer<"uint64"> {
   }
 
   encode(input: bigint, stream: OutputStream): void {
-    if (input < 232) {
+    if (input <= 0) {
+      stream.writeUint8(0);
+    } else if (input < 232) {
       stream.writeUint8(Number(input));
     } else if (input < 2147483648) {
       if (input < 65536) {
@@ -1403,9 +1405,12 @@ class Uint64Serializer extends AbstractBigIntSerializer<"uint64"> {
         stream.writeUint8(233);
         stream.writeInt32(Number(input));
       }
-    } else {
+    } else if (input <= MAX_UINT64) {
       stream.writeUint8(234);
       stream.writeUint64(input);
+    } else {
+      stream.writeUint8(234);
+      stream.writeUint64(MAX_UINT64);
     }
   }
 
