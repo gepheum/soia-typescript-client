@@ -995,6 +995,7 @@ function encodeUint32(length: number, stream: OutputStream): void {
     stream.writeUint8(232);
     stream.writeUint16(length);
   } else if (length < 4294967296) {
+    stream.writeUint8(234);
     stream.writeUint32(length);
   } else {
     throw new Error(`max length exceeded: ${length}`);
@@ -1392,12 +1393,19 @@ class Uint64Serializer extends AbstractBigIntSerializer<"uint64"> {
   }
 
   encode(input: bigint, stream: OutputStream): void {
-    if (input <= 0) {
-      stream.writeUint8(0);
+    if (input < 232) {
+      stream.writeUint8(Number(input));
+    } else if (input < 2147483648) {
+      if (input < 65536) {
+        stream.writeUint8(232);
+        stream.writeUint16(Number(input));
+      } else {
+        stream.writeUint8(233);
+        stream.writeInt32(Number(input));
+      }
     } else {
-      // Don't optimize for small numbers.
       stream.writeUint8(234);
-      stream.writeUint64(input < MAX_UINT64 ? input : MAX_UINT64);
+      stream.writeUint64(input);
     }
   }
 
