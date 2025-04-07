@@ -2669,6 +2669,7 @@ type TypeSpec =
   | {
       kind: "array";
       item: TypeSpec;
+      keyChain?: string;
     }
   | {
       kind: "record";
@@ -2919,7 +2920,7 @@ function makeMutableClassForRecord(
 function getSerializerForType(type: TypeSpec): Serializer<unknown> {
   switch (type.kind) {
     case "array":
-      return arraySerializer(getSerializerForType(type.item));
+      return arraySerializer(getSerializerForType(type.item), type.keyChain);
     case "optional":
       return optionalSerializer(getSerializerForType(type.other));
     case "primitive":
