@@ -392,8 +392,12 @@ export function primitiveSerializer<P extends keyof PrimitiveTypes>(
  */
 export function arraySerializer<Item>(
   item: Serializer<Item>,
+  keyChain?: string,
 ): Serializer<ReadonlyArray<Item>> {
-  return new ArraySerializerImpl(item as InternalSerializer<Item>);
+  if (keyChain !== undefined && !/^[a-z_]+(\.[a-z0-9_]+)*$/.test(keyChain)) {
+    throw new Error(`Invalid keyChain "${keyChain}"`);
+  }
+  return new ArraySerializerImpl(item as InternalSerializer<Item>, keyChain);
 }
 
 /** Returns a serializer of nullable `T`s. */
@@ -489,6 +493,7 @@ export interface ArrayDescriptor<T> extends TypeDescriptorBase {
   readonly itemType: TypeDescriptor<
     T extends ReadonlyArray<infer Item> ? Item : unknown
   >;
+  readonly keyChain?: string;
 }
 
 /**
@@ -796,10 +801,9 @@ type FieldDefinition = {
 /** Definition of a record in the JSON representation of a `TypeDescriptor`. */
 type RecordDefinition = {
   kind: "struct" | "enum";
-  name: string;
-  module: string;
+  id: string;
   fields: readonly FieldDefinition[];
-  removed?: ReadonlyArray<number>;
+  removed_fields?: ReadonlyArray<number>;
 };
 
 interface InternalSerializer<T = unknown> extends Serializer<T> {
@@ -1093,7 +1097,6 @@ export function parseTypeDescriptor(json: Json): TypeDescriptor {
   // First loop: create the serializer for each record.
   // It's not yet initialized.
   for (const record of typeDefinition.records) {
-    const recordKey = `${record.module}:${record.name}`;
     let serializer: StructSerializerImpl<Json> | EnumSerializerImpl<Json>;
     switch (record.kind) {
       case "struct":
@@ -1118,19 +1121,21 @@ export function parseTypeDescriptor(json: Json): TypeDescriptor {
       definition: record,
       serializer: serializer,
     };
-    recordBundles[recordKey] = recordBundle;
+    recordBundles[record.id] = recordBundle;
   }
 
   function parse(ts: TypeSignature): InternalSerializer {
     switch (ts.kind) {
-      case "array":
-        return new ArraySerializerImpl(parse(ts.item));
+      case "array": {
+        const { item, key_chain } = ts.value;
+        return new ArraySerializerImpl(parse(item), key_chain);
+      }
       case "optional":
-        return new OptionalSerializerImpl(parse(ts.other));
+        return new OptionalSerializerImpl(parse(ts.value));
       case "primitive":
-        return primitiveSerializer(ts.primitive) as InternalSerializer;
+        return primitiveSerializer(ts.value) as InternalSerializer;
       case "record":
-        const recordKey = `${ts.module}:${ts.name}`;
+        const recordKey = ts.value;
         return recordBundles[recordKey]!.serializer;
     }
   }
@@ -1140,8 +1145,10 @@ export function parseTypeDescriptor(json: Json): TypeDescriptor {
   for (const recordBundle of Object.values(recordBundles)) {
     const { definition, serializer } = recordBundle;
     const { defaultValue } = serializer;
-    const { module, removed } = definition;
-    const qualifiedName = definition.name;
+    const { id, removed_fields } = definition;
+    const idParts = id.split(":");
+    const module = idParts[0]!;
+    const qualifiedName = idParts[1]!;
     const nameParts = qualifiedName.split(".");
     const name = nameParts[nameParts.length - 1]!;
     const parentType =
@@ -1158,7 +1165,7 @@ export function parseTypeDescriptor(json: Json): TypeDescriptor {
         }
         const s = serializer as StructSerializerImpl<Json>;
         initOps.push(() =>
-          s.init(name, module, parentType, fields, removed ?? []),
+          s.init(name, module, parentType, fields, removed_fields ?? []),
         );
         break;
       }
@@ -1181,7 +1188,7 @@ export function parseTypeDescriptor(json: Json): TypeDescriptor {
                 } as EnumConstantField<Json>),
           );
         initOps.push(() =>
-          s.init(name, module, parentType, fields, removed ?? []),
+          s.init(name, module, parentType, fields, removed_fields ?? []),
         );
         break;
       }
@@ -1204,7 +1211,7 @@ abstract class AbstractPrimitiveSerializer<P extends keyof PrimitiveTypes>
   get typeSignature(): TypeSignature {
     return {
       kind: "primitive",
-      primitive: this.primitive,
+      value: this.primitive,
     };
   }
 
@@ -1402,7 +1409,7 @@ class Uint64Serializer extends AbstractBigIntSerializer<"uint64"> {
 
   encode(input: bigint, stream: OutputStream): void {
     if (input < 232) {
-      stream.writeUint8(Number(input));
+      stream.writeUint8(input <= 0 ? 0 : Number(input));
     } else if (input < 4294967296) {
       if (input < 65536) {
         stream.writeUint8(232);
@@ -1626,8 +1633,9 @@ class ArraySerializerImpl<Item>
   implements ArrayDescriptor<readonly Item[]>
 {
   constructor(
-      readonly itemSerializer: InternalSerializer<Item>,
-      readonly keyChain = "") {
+    readonly itemSerializer: InternalSerializer<Item>,
+    readonly keyChain?: string,
+  ) {
     super();
   }
 
@@ -1688,8 +1696,8 @@ class ArraySerializerImpl<Item>
       kind: "array",
       value: {
         item: this.itemSerializer.typeSignature,
-        key_chain: this.keyChain ? this.keyChain : undefined,
-      }
+        key_chain: this.keyChain,
+      },
     };
   }
 
@@ -1870,12 +1878,11 @@ abstract class AbstractRecordSerializer<T, F> extends AbstractSerializer<T> {
     }
     const recordDefinition: RecordDefinition = {
       kind: this.kind,
-      name: this.qualifiedName,
-      module: this.modulePath,
+      id: this.qualifiedName,
       fields: this.fieldDefinitions(),
     };
     if (this.removedNumbers.size) {
-      recordDefinition.removed = [...this.removedNumbers];
+      recordDefinition.removed_fields = [...this.removedNumbers];
     }
     out[recordKey] = recordDefinition;
     for (const dependency of this.dependencies()) {
@@ -2132,11 +2139,9 @@ class StructSerializerImpl<T = unknown>
   }
 
   get typeSignature(): TypeSignature {
-    CACA
     return {
       kind: "record",
-      name: this.qualifiedName,
-      module: this.modulePath,
+      value: `${this.modulePath}:${this.qualifiedName}`,
     };
   }
 
@@ -2403,8 +2408,7 @@ class EnumSerializerImpl<T = unknown>
   get typeSignature(): TypeSignature {
     return {
       kind: "record",
-      name: this.qualifiedName,
-      module: this.modulePath,
+      value: `${this.modulePath}:${this.qualifiedName}`,
     };
   }
 

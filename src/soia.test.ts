@@ -94,11 +94,11 @@ describe("timestamp serializer", () => {
     });
   });
 
-  it("TypeDescript#asJson()", () => {
+  it("TypeDescriptor#asJson()", () => {
     expect(serializer.typeDescriptor.asJson()).toMatch({
       type: {
         kind: "primitive",
-        primitive: "timestamp",
+        value: "timestamp",
       },
       records: [],
     });
@@ -326,7 +326,7 @@ describe("bool serializer", () => {
     expect(serializer.typeDescriptor.asJson()).toMatch({
       type: {
         kind: "primitive",
-        primitive: "bool",
+        value: "bool",
       },
       records: [],
     });
@@ -361,7 +361,7 @@ describe("int32 serializer", () => {
     expect(serializer.typeDescriptor.asJson()).toMatch({
       type: {
         kind: "primitive",
-        primitive: "int32",
+        value: "int32",
       },
       records: [],
     });
@@ -489,7 +489,7 @@ describe("int64 serializer", () => {
     expect(serializer.typeDescriptor.asJson()).toMatch({
       type: {
         kind: "primitive",
-        primitive: "int64",
+        value: "int64",
       },
       records: [],
     });
@@ -541,7 +541,7 @@ describe("uint64 serializer", () => {
     expect(serializer.typeDescriptor.asJson()).toMatch({
       type: {
         kind: "primitive",
-        primitive: "uint64",
+        value: "uint64",
       },
       records: [],
     });
@@ -593,7 +593,7 @@ describe("float32 serializer", () => {
     expect(serializer.typeDescriptor.asJson()).toMatch({
       type: {
         kind: "primitive",
-        primitive: "float32",
+        value: "float32",
       },
       records: [],
     });
@@ -661,7 +661,7 @@ describe("float64 serializer", () => {
     expect(serializer.typeDescriptor.asJson()).toMatch({
       type: {
         kind: "primitive",
-        primitive: "float64",
+        value: "float64",
       },
       records: [],
     });
@@ -721,7 +721,7 @@ describe("string serializer", () => {
     expect(serializer.typeDescriptor.asJson()).toMatch({
       type: {
         kind: "primitive",
-        primitive: "string",
+        value: "string",
       },
       records: [],
     });
@@ -775,7 +775,7 @@ describe("bytes serializer", () => {
     expect(serializer.typeDescriptor.asJson()).toMatch({
       type: {
         kind: "primitive",
-        primitive: "bytes",
+        value: "bytes",
       },
       records: [],
     });
@@ -813,9 +813,9 @@ describe("optional serializer", () => {
     expect(serializer.typeDescriptor.asJson()).toMatch({
       type: {
         kind: "optional",
-        other: {
+        value: {
           kind: "primitive",
-          primitive: "int32",
+          value: "int32",
         },
       },
       records: [],
@@ -836,7 +836,7 @@ describe("optional serializer", () => {
 
 describe("array serializer", () => {
   const itemSerializer = soia.primitiveSerializer("int32");
-  const serializer = soia.arraySerializer(itemSerializer);
+  const serializer = soia.arraySerializer(itemSerializer, "foo.bar");
   const tester = new SerializerTester(serializer);
 
   it("#typeDescriptor", () => {
@@ -850,9 +850,12 @@ describe("array serializer", () => {
     expect(serializer.typeDescriptor.asJson()).toMatch({
       type: {
         kind: "array",
-        item: {
-          kind: "primitive",
-          primitive: "int32",
+        value: {
+          item: {
+            kind: "primitive",
+            value: "int32",
+          },
+          key_chain: "foo.bar",
         },
       },
       records: [],
@@ -892,6 +895,23 @@ describe("string array serializer", () => {
   const itemSerializer = soia.primitiveSerializer("string");
   const serializer = soia.arraySerializer(itemSerializer);
   const tester = new SerializerTester(serializer);
+
+  it("TypeDescript#asJson()", () => {
+    expect(serializer.typeDescriptor.asJson()).toMatch({
+      type: {
+        kind: "array",
+        value: {
+          item: {
+            kind: "primitive",
+            value: "string",
+          },
+          key_chain: undefined,
+        },
+      },
+      records: [],
+    });
+    tester.reserializeTypeAdapterAndAssertNoLoss();
+  });
 
   tester.reserializeAndAssert([], {
     denseJson: [],
