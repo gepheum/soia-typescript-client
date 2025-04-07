@@ -394,7 +394,10 @@ export function arraySerializer<Item>(
   item: Serializer<Item>,
   keyChain?: string,
 ): Serializer<ReadonlyArray<Item>> {
-  if (keyChain !== undefined && !/^[a-z_]+(\.[a-z0-9_]+)*$/.test(keyChain)) {
+  if (
+    keyChain !== undefined &&
+    !/^[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*)*$/.test(keyChain)
+  ) {
     throw new Error(`Invalid keyChain "${keyChain}"`);
   }
   return new ArraySerializerImpl(item as InternalSerializer<Item>, keyChain);
