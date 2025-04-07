@@ -497,7 +497,7 @@ describe("int64 serializer", () => {
   });
 
   tester.reserializeAndAssert(BigInt("888888888888"), {
-    denseJson: "888888888888",
+    denseJson: 888888888888,
     bytesAsBase16: "ee380ee8f5ce000000",
   });
   // Numbers outside of bounds are clamped.
@@ -510,7 +510,7 @@ describe("int64 serializer", () => {
     bytesAsBase16: "ee0000000000000080",
   });
   tester.reserializeAndAssert(BigInt("0"), {
-    denseJson: "0",
+    denseJson: 0,
     bytesAsBase16: "00",
   });
   tester.deserializeZeroAndAssert(
@@ -549,7 +549,7 @@ describe("uint64 serializer", () => {
   });
 
   tester.reserializeAndAssert(BigInt("888888888888"), {
-    denseJson: "888888888888",
+    denseJson: 888888888888,
     bytesAsBase16: "ea380ee8f5ce000000",
   });
   // Numbers outside of bounds are clamped.
@@ -558,11 +558,11 @@ describe("uint64 serializer", () => {
     bytesAsBase16: "eaffffffffffffffff",
   });
   tester.reserializeAndAssert(BigInt("-1"), {
-    denseJson: "0",
+    denseJson: 0,
     bytesAsBase16: "00",
   });
   tester.reserializeAndAssert(BigInt("0"), {
-    denseJson: "0",
+    denseJson: 0,
     bytesAsBase16: "00",
   });
   tester.deserializeZeroAndAssert(

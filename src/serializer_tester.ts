@@ -141,7 +141,8 @@ export class SerializerTester<T> {
         expect(isDefaultFn(serializer.fromJson(0))).toBe(true);
       });
       it("from bytes", () => {
-        const bytes = new ArrayBuffer(1);
+        const bytes = new ArrayBuffer(5);
+        new TextEncoder().encodeInto("soia", new Uint8Array(bytes, 0, 4));
         expect(isDefaultFn(serializer.fromBytes(bytes))).toBe(true);
       });
     });
@@ -158,7 +159,10 @@ export class SerializerTester<T> {
 }
 
 export function toBase16(buffer: ArrayBuffer): string {
+  const prefix = new TextDecoder().decode(new Uint8Array(buffer).slice(0, 4));
+  expect(prefix).toBe("soia");
   return [...new Uint8Array(buffer)]
+    .slice(4)
     .map((x) => x.toString(16).padStart(2, "0"))
     .join("");
 }

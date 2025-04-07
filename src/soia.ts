@@ -765,20 +765,22 @@ type TypeDefinition = {
 type TypeSignature =
   | {
       kind: "optional";
-      other: TypeSignature;
+      value: TypeSignature;
     }
   | {
       kind: "array";
-      item: TypeSignature;
+      value: {
+        item: TypeSignature;
+        key_chain?: string;
+      };
     }
   | {
       kind: "record";
-      name: string;
-      module: string;
+      value: string;
     }
   | {
       kind: "primitive";
-      primitive: keyof PrimitiveTypes;
+      value: keyof PrimitiveTypes;
     };
 
 /**
@@ -1008,7 +1010,9 @@ abstract class AbstractSerializer<T> implements InternalSerializer<T> {
   }
 
   fromBytes(bytes: ArrayBuffer): T {
-    return this.decode(new InputStream(new DataView(bytes)));
+    const inputStream = new InputStream(new DataView(bytes));
+    inputStream.offset = 4; // Skip the "soia" header.
+    return this.decode(inputStream);
   }
 
   toJsonCode(input: T, flavor?: JsonFlavor): string {
@@ -1018,6 +1022,7 @@ abstract class AbstractSerializer<T> implements InternalSerializer<T> {
 
   toBytes(input: T): BinaryForm {
     const stream = new OutputStream();
+    stream.putUtf8String("soia");
     this.encode(input, stream);
     return stream.finalize();
   }
@@ -1344,7 +1349,11 @@ const MAX_INT64 = BigInt("9223372036854775807");
 class Int64Serializer extends AbstractBigIntSerializer<"int64"> {
   readonly primitive = "int64";
 
-  toJson(input: bigint): string {
+  toJson(input: bigint): number | string {
+    // 9007199254740991 == Number.MAX_SAFE_INTEGER
+    if (-9007199254740991 <= input && input <= 9007199254740991) {
+      return Number(input);
+    }
     const s = BigInt(input).toString();
     // Clamp the number if it's out of bounds.
     return s.length <= 18
@@ -1383,19 +1392,16 @@ const MAX_UINT64 = BigInt("18446744073709551615");
 class Uint64Serializer extends AbstractBigIntSerializer<"uint64"> {
   readonly primitive = "uint64";
 
-  toJson(input: bigint): string {
+  toJson(input: bigint): number | string {
+    if (input <= 9007199254740991) {
+      return input <= 0 ? 0 : Number(input);
+    }
     input = BigInt(input);
-    return input <= 0
-      ? "0"
-      : MAX_UINT64 < input
-        ? MAX_UINT64.toString()
-        : input.toString();
+    return MAX_UINT64 < input ? MAX_UINT64.toString() : input.toString();
   }
 
   encode(input: bigint, stream: OutputStream): void {
-    if (input <= 0) {
-      stream.writeUint8(0);
-    } else if (input < 232) {
+    if (input < 232) {
       stream.writeUint8(Number(input));
     } else if (input < 4294967296) {
       if (input < 65536) {
@@ -1619,7 +1625,9 @@ class ArraySerializerImpl<Item>
   extends AbstractSerializer<readonly Item[]>
   implements ArrayDescriptor<readonly Item[]>
 {
-  constructor(readonly itemSerializer: InternalSerializer<Item>) {
+  constructor(
+      readonly itemSerializer: InternalSerializer<Item>,
+      readonly keyChain = "") {
     super();
   }
 
@@ -1678,7 +1686,10 @@ class ArraySerializerImpl<Item>
   get typeSignature(): TypeSignature {
     return {
       kind: "array",
-      item: this.itemSerializer.typeSignature,
+      value: {
+        item: this.itemSerializer.typeSignature,
+        key_chain: this.keyChain ? this.keyChain : undefined,
+      }
     };
   }
 
@@ -1736,7 +1747,7 @@ class OptionalSerializerImpl<Other>
   get typeSignature(): TypeSignature {
     return {
       kind: "optional",
-      other: this.otherSerializer.typeSignature,
+      value: this.otherSerializer.typeSignature,
     };
   }
 
@@ -2121,6 +2132,7 @@ class StructSerializerImpl<T = unknown>
   }
 
   get typeSignature(): TypeSignature {
+    CACA
     return {
       kind: "record",
       name: this.qualifiedName,
