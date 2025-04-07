@@ -333,15 +333,29 @@ export interface Serializer<T> {
   /**
    * Converts back the given stringified JSON to `T`.
    * Works with both [flavors]{@link JsonFlavor} of JSON.
+   * 
+   * Pass in "keep-unrecognized-fields" if and only if the input JSON comes
+   * from a trusted program which might have been built from more recent
+   * source files.
    */
-  fromJsonCode(code: string): T;
+  fromJsonCode(code: string, keep?: "keep-unrecognized-fields"): T;
   /**
    * Converts back the given JSON to `T`.
    * Works with both [flavors]{@link JsonFlavor} of JSON.
+   * 
+   * Pass in "keep-unrecognized-fields" if and only if the input JSON comes
+   * from a trusted program which might have been built from more recent
+   * source files.
    */
-  fromJson(json: Json): T;
-  /** Converts back the given binary form to `T`. */
-  fromBytes(bytes: ArrayBuffer): T;
+  fromJson(json: Json, keep?: "keep-unrecognized-fields"): T;
+  /**
+   * Converts back the given binary form to `T`.
+   * 
+   * Pass in "keep-unrecognized-fields" if and only if the input JSON comes
+   * from a trusted program which might have been built from more recent
+   * source files.
+   */
+  fromBytes(bytes: ArrayBuffer, keep?: "keep-unrecognized-fields"): T;
   /**
    * Converts the given `T` to JSON and returns the stringified JSON. Same as
    * calling `JSON.stringify()` on the result of `toJson()`.
@@ -820,11 +834,16 @@ interface InternalSerializer<T = unknown> extends Serializer<T> {
 
 /** Parameter of the {@link InternalSerializer.decode} method. */
 class InputStream {
-  constructor(readonly dataView: DataView) {
+  constructor(
+    readonly dataView: DataView,
+    keep?: "keep-unrecognized-fields",
+  ) {
     this.buffer = dataView.buffer;
+    this.keepUnrecognizedFields = !!keep;
   }
 
   readonly buffer: ArrayBuffer;
+  readonly keepUnrecognizedFields: boolean;
   offset = 0;
 
   readUint8(): number {
@@ -1012,12 +1031,12 @@ function encodeUint32(length: number, stream: OutputStream): void {
 }
 
 abstract class AbstractSerializer<T> implements InternalSerializer<T> {
-  fromJsonCode(code: string): T {
-    return this.fromJson(JSON.parse(code));
+  fromJsonCode(code: string, keep?: "keep-unrecognized-fields"): T {
+    return this.fromJson(JSON.parse(code), keep);
   }
 
-  fromBytes(bytes: ArrayBuffer): T {
-    const inputStream = new InputStream(new DataView(bytes));
+  fromBytes(bytes: ArrayBuffer, keep?: "keep-unrecognized-fields"): T {
+    const inputStream = new InputStream(new DataView(bytes), keep);
     inputStream.offset = 4; // Skip the "soia" header.
     return this.decode(inputStream);
   }
@@ -1044,7 +1063,7 @@ abstract class AbstractSerializer<T> implements InternalSerializer<T> {
   }
 
   abstract readonly defaultValue: T;
-  abstract fromJson(json: Json): T;
+  abstract fromJson(json: Json, keep?: "keep-unrecognized-fields"): T;
   abstract toJson(input: T, flavor?: JsonFlavor): Json;
   abstract decode(stream: InputStream): T;
   abstract encode(input: T, stream: OutputStream): void;
@@ -1231,7 +1250,7 @@ class BoolSerializer extends AbstractPrimitiveSerializer<"bool"> {
     return flavor === "readable" ? !!input : input ? 1 : 0;
   }
 
-  fromJson(json: Json): boolean {
+  fromJson(json: Json, keep?: "keep-unrecognized-fields"): boolean {
     return !!json;
   }
 
@@ -1252,7 +1271,7 @@ class Int32Serializer extends AbstractPrimitiveSerializer<"int32"> {
     return input | 0;
   }
 
-  fromJson(json: Json): number {
+  fromJson(json: Json, keep?: "keep-unrecognized-fields"): number {
     // `+value` will work if the input JSON value is a string, which is
     // what the int64 serializer produces.
     return +(json as number | string) | 0;
@@ -1303,7 +1322,7 @@ abstract class FloatSerializer<
     throw new TypeError();
   }
 
-  fromJson(json: Json): number {
+  fromJson(json: Json, keep?: "keep-unrecognized-fields"): number {
     return +(json as number | string);
   }
 
@@ -1348,7 +1367,7 @@ abstract class AbstractBigIntSerializer<
 > extends AbstractPrimitiveSerializer<P> {
   readonly defaultValue = BigInt(0);
 
-  fromJson(json: Json): bigint {
+  fromJson(json: Json, keep?: "keep-unrecognized-fields"): bigint {
     return BigInt(json as string | number);
   }
 }
@@ -1453,7 +1472,7 @@ class TimestampSerializer extends AbstractPrimitiveSerializer<"timestamp"> {
       : input.unixMillis;
   }
 
-  fromJson(json: Json): Timestamp {
+  fromJson(json: Json, keep?: "keep-unrecognized-fields"): Timestamp {
     return Timestamp.fromUnixMillis(
       typeof json === "number"
         ? json
@@ -1492,7 +1511,7 @@ class StringSerializer extends AbstractPrimitiveSerializer<"string"> {
     throw this.newTypeError(input);
   }
 
-  fromJson(json: Json): string {
+  fromJson(json: Json, keep?: "keep-unrecognized-fields"): string {
     if (typeof json === "string") {
       return json;
     }
@@ -1564,7 +1583,7 @@ class ByteStringSerializer extends AbstractPrimitiveSerializer<"bytes"> {
     return input.toBase64();
   }
 
-  fromJson(json: Json): ByteString {
+  fromJson(json: Json, keep?: "keep-unrecognized-fields"): ByteString {
     return json === 0
       ? ByteString.EMPTY
       : ByteString.fromBase64(json as string);
@@ -1649,12 +1668,14 @@ class ArraySerializerImpl<Item>
     return input.map((e) => this.itemSerializer.toJson(e, flavor));
   }
 
-  fromJson(json: Json): ReadonlyArray<Item> {
+  fromJson(json: Json, keep?: "keep-unrecognized-fields"): ReadonlyArray<Item> {
     if (json === 0) {
       return _EMPTY_ARRAY;
     }
     return freezeArray(
-      (json as readonly Json[]).map((e) => this.itemSerializer.fromJson(e)),
+      (json as readonly Json[]).map((e) =>
+        this.itemSerializer.fromJson(e, keep),
+      ),
     );
   }
 
@@ -1724,8 +1745,8 @@ class OptionalSerializerImpl<Other>
     return input !== null ? this.otherSerializer.toJson(input, flavor) : null;
   }
 
-  fromJson(json: Json): Other | null {
-    return json !== null ? this.otherSerializer.fromJson(json) : null;
+  fromJson(json: Json, keep?: "keep-unrecognized-fields"): Other | null {
+    return json !== null ? this.otherSerializer.fromJson(json, keep) : null;
   }
 
   encode(input: Other | null, stream: OutputStream): void {
@@ -1988,7 +2009,7 @@ class StructSerializerImpl<T = unknown>
     }
   }
 
-  fromJson(json: Json): T {
+  fromJson(json: Json, keep?: "keep-unrecognized-fields"): T {
     if (!json) {
       return this.defaultValue;
     }
@@ -1998,12 +2019,14 @@ class StructSerializerImpl<T = unknown>
       // Dense flavor.
       if (json.length > recognizedSlots) {
         // We have some unrecognized fields.
-        const unrecognizedFields = new UnrecognizedFields(
-          this.token,
-          json.length,
-          copyJson(json.slice(recognizedSlots)),
-        );
-        initializer["^"] = unrecognizedFields;
+        if (keep) {
+          const unrecognizedFields = new UnrecognizedFields(
+            this.token,
+            json.length,
+            copyJson(json.slice(recognizedSlots)),
+          );
+          initializer["^"] = unrecognizedFields;
+        }
         // Now that we have stored the unrecognized fields in `initializer`, we
         // can remove them from `json`.
         json = json.slice(0, recognizedSlots);
@@ -2011,7 +2034,10 @@ class StructSerializerImpl<T = unknown>
       for (let i = 0; i < json.length && i < slots.length; ++i) {
         const field = slots[i];
         if (field) {
-          initializer[field.property] = field.serializer.fromJson(json[i]!);
+          initializer[field.property] = field.serializer.fromJson(
+            json[i]!,
+            keep,
+          );
         }
         // Else the field was removed.
       }
@@ -2022,7 +2048,10 @@ class StructSerializerImpl<T = unknown>
       for (const name in json) {
         const field = fieldMapping[name];
         if (field) {
-          initializer[field.property] = field.serializer.fromJson(json[name]!);
+          initializer[field.property] = field.serializer.fromJson(
+            json[name]!,
+            keep,
+          );
         }
       }
       return this.createFn(initializer);
@@ -2096,15 +2125,17 @@ class StructSerializerImpl<T = unknown>
       for (let i = recognizedSlots; i < encodedSlots; ++i) {
         decodeUnused(stream);
       }
-      const end = stream.offset;
-      const unrecognizedBytes = ByteString.sliceOf(stream.buffer, start, end);
-      const unrecognizedFields = new UnrecognizedFields(
-        this.token,
-        encodedSlots,
-        undefined,
-        unrecognizedBytes,
-      );
-      initializer["^"] = unrecognizedFields;
+      if (stream.keepUnrecognizedFields) {
+        const end = stream.offset;
+        const unrecognizedBytes = ByteString.sliceOf(stream.buffer, start, end);
+        const unrecognizedFields = new UnrecognizedFields(
+          this.token,
+          encodedSlots,
+          undefined,
+          unrecognizedBytes,
+        );
+        initializer["^"] = unrecognizedFields;
+      }
     }
     return this.createFn(initializer);
   }
@@ -2277,14 +2308,14 @@ class EnumSerializerImpl<T = unknown>
     }
   }
 
-  fromJson(json: Json): T {
+  fromJson(json: Json, keep?: "keep-unrecognized-fields"): T {
     const isNumber = typeof json === "number";
     if (isNumber || typeof json === "string") {
       const field = this.fieldMapping[isNumber ? json : String(json)];
       if (!field) {
         // Check if the field was removed, in which case we want to return
         // UNKNOWN, or is unrecognized.
-        return isNumber && this.removedNumbers.has(json)
+        return !keep || (isNumber && this.removedNumbers.has(json))
           ? this.defaultValue
           : this.createFn(new UnrecognizedEnum(this.token, copyJson(json)));
       }
@@ -2308,7 +2339,8 @@ class EnumSerializerImpl<T = unknown>
     if (!field) {
       // Check if the field was removed, in which case we want to return
       // UNKNOWN, or is unrecognized.
-      return typeof fieldKey === "number" && this.removedNumbers.has(fieldKey)
+      return !keep ||
+        (typeof fieldKey === "number" && this.removedNumbers.has(fieldKey))
         ? this.defaultValue
         : this.createFn(
             new UnrecognizedEnum(this.token, copyJson(json), undefined),
@@ -2318,7 +2350,7 @@ class EnumSerializerImpl<T = unknown>
     if (!serializer) {
       throw new Error(`refers to a constant field: ${json}`);
     }
-    return field.wrap(serializer.fromJson(valueAsJson));
+    return field.wrap(serializer.fromJson(valueAsJson, keep));
   }
 
   encode(input: T, stream: OutputStream): void {
@@ -2367,7 +2399,7 @@ class EnumSerializerImpl<T = unknown>
       if (!field) {
         // Check if the field was removed, in which case we want to return
         // UNKNOWN, or is unrecognized.
-        if (this.removedNumbers.has(number)) {
+        if (!stream.keepUnrecognizedFields || this.removedNumbers.has(number)) {
           return this.defaultValue;
         } else {
           const { offset } = stream;
@@ -2390,7 +2422,7 @@ class EnumSerializerImpl<T = unknown>
         decodeUnused(stream);
         // Check if the field was removed, in which case we want to return
         // UNKNOWN, or is unrecognized.
-        if (this.removedNumbers.has(number)) {
+        if (!stream.keepUnrecognizedFields || this.removedNumbers.has(number)) {
           return this.defaultValue;
         } else {
           const { offset } = stream;
