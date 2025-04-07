@@ -54,7 +54,11 @@ export class SerializerTester<T> {
           });
 
           it("#toJson() -> #fromJson() -> #toJson()", () => {
-            const reserialized: T = serializer.fromJson(actualJson);
+            serializer.fromJson(actualJson);
+            const reserialized: T = serializer.fromJson(
+              actualJson,
+              "keep-unrecognized-fields",
+            );
             expect(serializer.toJson(reserialized, flavor)).toMatch(
               expectedJson,
             );
@@ -63,6 +67,7 @@ export class SerializerTester<T> {
           it("#toJsonCode() -> #fromJsonCode() -> #toJson()", () => {
             const reserialized = serializer.fromJsonCode(
               serializer.toJsonCode(input, flavor),
+              "keep-unrecognized-fields",
             );
             expect(serializer.toJson(reserialized, flavor)).toMatch(
               expectedJson,
@@ -77,7 +82,11 @@ export class SerializerTester<T> {
         const actualBase16 = toBase16(actualBytes);
         expect(actualBase16).toBe(expected.bytesAsBase16);
       });
-      const reserialized = serializer.fromBytes(actualBytes);
+      serializer.fromBytes(actualBytes);
+      const reserialized = serializer.fromBytes(
+        actualBytes,
+        "keep-unrecognized-fields",
+      );
       it("#toBytes() -> #fromBytes() -> #toBytes()", () => {
         const actualBase16 = toBase16(
           serializer.toBytes(reserialized).toBuffer(),
@@ -129,7 +138,11 @@ export class SerializerTester<T> {
         }
       }
 
-      return serializer.fromJson(serializer.toJson(input));
+      serializer.fromJson(serializer.toJson(input));
+      return serializer.fromJson(
+        serializer.toJson(input),
+        "keep-unrecognized-fields",
+      );
     });
   }
 

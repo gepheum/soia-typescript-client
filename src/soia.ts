@@ -333,7 +333,7 @@ export interface Serializer<T> {
   /**
    * Converts back the given stringified JSON to `T`.
    * Works with both [flavors]{@link JsonFlavor} of JSON.
-   * 
+   *
    * Pass in "keep-unrecognized-fields" if and only if the input JSON comes
    * from a trusted program which might have been built from more recent
    * source files.
@@ -342,7 +342,7 @@ export interface Serializer<T> {
   /**
    * Converts back the given JSON to `T`.
    * Works with both [flavors]{@link JsonFlavor} of JSON.
-   * 
+   *
    * Pass in "keep-unrecognized-fields" if and only if the input JSON comes
    * from a trusted program which might have been built from more recent
    * source files.
@@ -350,7 +350,7 @@ export interface Serializer<T> {
   fromJson(json: Json, keep?: "keep-unrecognized-fields"): T;
   /**
    * Converts back the given binary form to `T`.
-   * 
+   *
    * Pass in "keep-unrecognized-fields" if and only if the input JSON comes
    * from a trusted program which might have been built from more recent
    * source files.
