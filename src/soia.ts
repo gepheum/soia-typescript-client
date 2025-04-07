@@ -1135,8 +1135,8 @@ export function parseTypeDescriptor(json: Json): TypeDescriptor {
       case "primitive":
         return primitiveSerializer(ts.value) as InternalSerializer;
       case "record":
-        const recordKey = ts.value;
-        return recordBundles[recordKey]!.serializer;
+        const recordId = ts.value;
+        return recordBundles[recordId]!.serializer;
     }
   }
 
@@ -1872,19 +1872,19 @@ abstract class AbstractRecordSerializer<T, F> extends AbstractSerializer<T> {
   abstract registerFields(fields: readonly F[]): void;
 
   addRecordDefinitionsTo(out: { [k: string]: RecordDefinition }): void {
-    const recordKey = `${this.modulePath}:${this.qualifiedName}`;
-    if (out[recordKey]) {
+    const recordId = `${this.modulePath}:${this.qualifiedName}`;
+    if (out[recordId]) {
       return;
     }
     const recordDefinition: RecordDefinition = {
       kind: this.kind,
-      id: this.qualifiedName,
+      id: recordId,
       fields: this.fieldDefinitions(),
     };
     if (this.removedNumbers.size) {
       recordDefinition.removed_fields = [...this.removedNumbers];
     }
-    out[recordKey] = recordDefinition;
+    out[recordId] = recordDefinition;
     for (const dependency of this.dependencies()) {
       dependency.addRecordDefinitionsTo(out);
     }
