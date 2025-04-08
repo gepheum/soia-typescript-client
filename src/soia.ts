@@ -2645,6 +2645,80 @@ function toStringImpl<T>(value: T): string {
 }
 
 // =============================================================================
+// Soia services
+// =============================================================================
+
+export type RequestMetadata = Omit<RequestInit, "body" | "method">;
+
+const BAD_REQUEST_PREFIX = "bad-request:";
+const SERVER_ERROR_PREFIX = "server-error:";
+
+// Sends RPCs to a soia service.
+export class ServiceClient {
+  constructor(
+    private readonly serviceUrl: string,
+    private readonly getRequestMetadata: (
+      m: Method<unknown, unknown>,
+    ) => RequestMetadata = () => ({}),
+  ) {
+    const url = new URL(serviceUrl);
+    if (url.search) {
+      throw new Error("Service URL must not contain a query string");
+    }
+  }
+
+  async invokeRemote<Request, Response>(
+    method: Method<Request, Response>,
+    request: Request,
+    httpMethod: "GET" | "POST" = "POST",
+  ): Promise<Response> {
+    const requestJson = method.requestSerializer.toJsonCode(request);
+    const requestInit: RequestInit = { ...this.getRequestMetadata(method) };
+    const url = new URL(this.serviceUrl);
+    requestInit.method = httpMethod;
+    if (httpMethod === "POST") {
+      requestInit.body = [method.name, method.number, "", requestJson].join(
+        ":",
+      );
+    } else {
+      url.searchParams.set("method", method.name);
+      url.searchParams.set("m", String(method.number));
+      url.searchParams.set("f", "");
+      url.searchParams.set("req", requestJson);
+    }
+    const httpResponse = await fetch(this.serviceUrl, requestInit);
+    const responseData = await httpResponse.blob();
+    if (responseData.type === "text/plain") {
+      const text = await responseData.text();
+      if (text.startsWith(BAD_REQUEST_PREFIX)) {
+        const message = text.substring(BAD_REQUEST_PREFIX.length);
+        throw new Error(`Bad request: ${message}`);
+      } else if (text.startsWith(SERVER_ERROR_PREFIX)) {
+        const message = text.substring(SERVER_ERROR_PREFIX.length);
+        throw new Error(`Server error: ${message}`);
+      }
+    } else if (httpResponse.ok) {
+      if (responseData.type === "application/json") {
+        const jsonCode = await responseData.text();
+        return method.responseSerializer.fromJsonCode(
+          jsonCode,
+          "keep-unrecognized-fields",
+        );
+      } else if (responseData.type === "application/octet-stream") {
+        const bytes = await responseData.arrayBuffer();
+        return method.responseSerializer.fromBytes(
+          bytes,
+          "keep-unrecognized-fields",
+        );
+      }
+    }
+    throw new Error(
+      `HTTP error: ${httpResponse.statusText} (${httpResponse.status})`,
+    );
+  }
+}
+
+// =============================================================================
 // Module classes initialization
 // =============================================================================
 
