@@ -2784,16 +2784,16 @@ export class ServiceImpl<
    * If you are using ExpressJS as your web application framework, you don't
    * need to call this method, you can simply call the
    * `installServiceOnExpressApp()` top-level function.
-   * 
+   *
    * Pass in "keep-unrecognized-fields" if the request cannot come from a
    * malicious user.
-  */
+   */
   async handleRequest(
     reqBody: string,
     getQueryParam: (name: string) => string | undefined,
     reqMeta: RequestMeta,
     resMeta: ResponseMeta,
-    keepUnrecognizedFields?: "keep-unrecognized-fields"
+    keepUnrecognizedFields?: "keep-unrecognized-fields",
   ): Promise<RawResponse> {
     if (getQueryParam("list") !== undefined) {
       const json = {
@@ -2853,7 +2853,10 @@ export class ServiceImpl<
 
     let req: unknown;
     try {
-      req = methodImpl.method.requestSerializer.fromJsonCode(requestData, keepUnrecognizedFields);
+      req = methodImpl.method.requestSerializer.fromJsonCode(
+        requestData,
+        keepUnrecognizedFields,
+      );
     } catch (e) {
       return new RawResponse(
         `bad request: can't parse JSON: ${e}`,
