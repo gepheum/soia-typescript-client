@@ -1,3 +1,10 @@
+import type {
+  Express as ExpressApp,
+  Request as ExpressRequest,
+  Response as ExpressResponse,
+  text as ExpressText,
+} from "express";
+
 /**
  * A single moment in time represented in a platform-independent format, with a
  * precision of one millisecond.
@@ -2648,18 +2655,16 @@ function toStringImpl<T>(value: T): string {
 // Soia services
 // =============================================================================
 
-export type RequestMetadata = Omit<RequestInit, "body" | "method">;
+/** Metadata of an HTTP request sent by a service client. */
+export type RequestMeta = Omit<RequestInit, "body" | "method">;
 
-const BAD_REQUEST_PREFIX = "bad-request:";
-const SERVER_ERROR_PREFIX = "server-error:";
-
-// Sends RPCs to a soia service.
+/** Sends RPCs to a soia service. */
 export class ServiceClient {
   constructor(
     private readonly serviceUrl: string,
     private readonly getRequestMetadata: (
       m: Method<unknown, unknown>,
-    ) => RequestMetadata = () => ({}),
+    ) => RequestMeta = () => ({}),
   ) {
     const url = new URL(serviceUrl);
     if (url.search) {
@@ -2667,6 +2672,7 @@ export class ServiceClient {
     }
   }
 
+  /** Invokes the given method on the remote server through an RPC. */
   async invokeRemote<Request, Response>(
     method: Method<Request, Response>,
     request: Request,
@@ -2688,34 +2694,240 @@ export class ServiceClient {
     }
     const httpResponse = await fetch(this.serviceUrl, requestInit);
     const responseData = await httpResponse.blob();
-    if (responseData.type === "text/plain") {
-      const text = await responseData.text();
-      if (text.startsWith(BAD_REQUEST_PREFIX)) {
-        const message = text.substring(BAD_REQUEST_PREFIX.length);
-        throw new Error(`Bad request: ${message}`);
-      } else if (text.startsWith(SERVER_ERROR_PREFIX)) {
-        const message = text.substring(SERVER_ERROR_PREFIX.length);
-        throw new Error(`Server error: ${message}`);
+    if (httpResponse.ok) {
+      const jsonCode = await responseData.text();
+      return method.responseSerializer.fromJsonCode(
+        jsonCode,
+        "keep-unrecognized-fields",
+      );
+    } else {
+      let message = "";
+      if (responseData.type === "text/plain") {
+        message = `: ${await responseData.text()}`;
       }
-    } else if (httpResponse.ok) {
-      if (responseData.type === "application/json") {
-        const jsonCode = await responseData.text();
-        return method.responseSerializer.fromJsonCode(
-          jsonCode,
-          "keep-unrecognized-fields",
-        );
-      } else if (responseData.type === "application/octet-stream") {
-        const bytes = await responseData.arrayBuffer();
-        return method.responseSerializer.fromBytes(
-          bytes,
-          "keep-unrecognized-fields",
-        );
+      throw new Error(`HTTP response status ${httpResponse.status}${message}`);
+    }
+  }
+}
+
+/** Raw response returned by the server. */
+export class RawResponse {
+  constructor(
+    readonly data: string,
+    readonly type: "ok-json" | "bad-request" | "server-error",
+  ) {}
+
+  get statusCode(): number {
+    switch (this.type) {
+      case "ok-json":
+        return 200;
+      case "bad-request":
+        return 400;
+      case "server-error":
+        return 500;
+      default: {
+        throw new Error();
       }
     }
-    throw new Error(
-      `HTTP error: ${httpResponse.statusText} (${httpResponse.status})`,
-    );
   }
+
+  get contentType(): string {
+    switch (this.type) {
+      case "ok-json":
+        return "application/json";
+      case "bad-request":
+      case "server-error":
+        return "text/plain";
+      default: {
+        throw new Error();
+      }
+    }
+  }
+}
+
+/**
+ * Implementation of a soia service.
+ *
+ * Usage: call `.addMethod()` to register methods, then install the service on
+ * an HTTP server either by:
+ *   - calling the `installServiceOnExpressApp()` top-level function  if you are
+ *       using ExpressJS
+ *   - writing your own implementation of `installServiceOn*()` which calls
+ *       `.handleRequest()` if you are using another web application framework
+ */
+export class ServiceImpl<
+  RequestMeta = ExpressRequest,
+  ResponseMeta = ExpressResponse,
+> {
+  addMethod<Request, Response>(
+    method: Method<Request, Response>,
+    impl: (
+      req: Request,
+      reqMeta: RequestMeta,
+      resMeta: ResponseMeta,
+    ) => Promise<Response>,
+  ): void {
+    const { number } = method;
+    if (this.methodImpls[number]) {
+      throw new Error(
+        `Method with the same number already registered (${number})`,
+      );
+    }
+    this.methodImpls[number] = {
+      method: method,
+      impl: impl,
+    } as MethodImpl<unknown, unknown, RequestMeta, ResponseMeta>;
+  }
+
+  /**
+   * Parses the content of a user request and invokes the appropriate method.
+   * If you are using ExpressJS as your web application framework, you don't
+   * need to call this method, you can simply call the
+   * `installServiceOnExpressApp()` top-level function.
+   * 
+   * Pass in "keep-unrecognized-fields" if the request cannot come from a
+   * malicious user.
+  */
+  async handleRequest(
+    reqBody: string,
+    getQueryParam: (name: string) => string | undefined,
+    reqMeta: RequestMeta,
+    resMeta: ResponseMeta,
+    keepUnrecognizedFields?: "keep-unrecognized-fields"
+  ): Promise<RawResponse> {
+    if (getQueryParam("list") !== undefined) {
+      const json = {
+        methods: Object.values(this.methodImpls).map((methodImpl) => ({
+          method: methodImpl.method.name,
+          number: methodImpl.method.name,
+          request: methodImpl.method.requestSerializer.typeDescriptor.asJson(),
+          response:
+            methodImpl.method.responseSerializer.typeDescriptor.asJson(),
+        })),
+      };
+      const jsonCode = JSON.stringify(json, undefined, "  ");
+      return new RawResponse(jsonCode, "ok-json");
+    }
+
+    let methodName: string;
+    let format: string;
+    let requestData: string;
+
+    let methodNumberStr = getQueryParam("m");
+
+    if (methodNumberStr !== undefined) {
+      // A GET request.
+      methodName = getQueryParam("method") || "";
+      format = getQueryParam("f") || "";
+      requestData = getQueryParam("req") || "";
+    } else {
+      // A POST request.
+      const match = reqBody.match(/^([^:]*):([^:]*):([^:]*):([\S\s]*)$/);
+      if (!match) {
+        return new RawResponse(
+          "bad request: invalid request format",
+          "bad-request",
+        );
+      }
+      methodName = match[1]!;
+      methodNumberStr = match[2]!;
+      format = match[3]!;
+      requestData = match[4]!;
+    }
+
+    if (!/-?[0-9]+/.test(methodNumberStr)) {
+      return new RawResponse(
+        "bad request: can't parse method number",
+        "bad-request",
+      );
+    }
+    const methodNumber = parseInt(methodNumberStr);
+
+    const methodImpl = this.methodImpls[methodNumber];
+    if (!methodImpl) {
+      return new RawResponse(
+        `bad request: method not found: ${methodName}; number: ${methodNumber}`,
+        "bad-request",
+      );
+    }
+
+    let req: unknown;
+    try {
+      req = methodImpl.method.requestSerializer.fromJsonCode(requestData, keepUnrecognizedFields);
+    } catch (e) {
+      return new RawResponse(
+        `bad request: can't parse JSON: ${e}`,
+        "bad-request",
+      );
+    }
+
+    let res: unknown;
+    try {
+      res = await methodImpl.impl(req, reqMeta, resMeta);
+    } catch (e) {
+      return new RawResponse(`server error: ${e}`, "server-error");
+    }
+
+    let resJson: string;
+    try {
+      const flavor = format === "readable" ? "readable" : "dense";
+      resJson = methodImpl.method.responseSerializer.toJsonCode(res, flavor);
+    } catch (e) {
+      return new RawResponse(
+        `server error: can't serialize response to JSON: ${e}`,
+        "server-error",
+      );
+    }
+
+    return new RawResponse(resJson, "ok-json");
+  }
+
+  private readonly methodImpls: {
+    [number: number]: MethodImpl<unknown, unknown, RequestMeta, ResponseMeta>;
+  } = {};
+}
+
+interface MethodImpl<Request, Response, RequestMeta, ResponseMeta> {
+  method: Method<Request, Response>;
+  impl: (
+    req: Request,
+    reqMeta: RequestMeta,
+    resMeta: ResponseMeta,
+  ) => Promise<Response>;
+}
+
+export function installServiceOnExpressApp(
+  app: ExpressApp,
+  queryPath: string,
+  serviceImpl: ServiceImpl<ExpressRequest, ExpressResponse>,
+  text: typeof ExpressText,
+  keepUnrecognizedFields?: "keep-unrecognized-fields",
+): void {
+  const callback = async (
+    req: ExpressRequest,
+    res: ExpressResponse,
+  ): Promise<void> => {
+    const body = typeof req.body === "string" ? req.body : "";
+    const getQueryParam = (name: string): string | undefined => {
+      if (typeof req.query !== "object") return undefined;
+      const queryParam = req.query[name];
+      if (typeof queryParam !== "string") return undefined;
+      return queryParam;
+    };
+    const rawResponse = await serviceImpl.handleRequest(
+      body,
+      getQueryParam,
+      req,
+      res,
+      keepUnrecognizedFields,
+    );
+    res
+      .status(rawResponse.statusCode)
+      .contentType(rawResponse.contentType)
+      .send(rawResponse.data);
+  };
+  app.get(queryPath, callback);
+  app.post(queryPath, text(), callback);
 }
 
 // =============================================================================
