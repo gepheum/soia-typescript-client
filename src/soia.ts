@@ -2692,7 +2692,7 @@ export class ServiceClient {
       url.searchParams.set("f", "");
       url.searchParams.set("req", requestJson);
     }
-    const httpResponse = await fetch(this.serviceUrl, requestInit);
+    const httpResponse = await fetch(url, requestInit);
     const responseData = await httpResponse.blob();
     if (httpResponse.ok) {
       const jsonCode = await responseData.text();
