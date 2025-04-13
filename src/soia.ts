@@ -2766,7 +2766,7 @@ export class ServiceImpl<
       reqMeta: RequestMeta,
       resMeta: ResponseMeta,
     ) => Promise<Response>,
-  ): void {
+  ): ServiceImpl<RequestMeta, ResponseMeta> {
     const { number } = method;
     if (this.methodImpls[number]) {
       throw new Error(
@@ -2777,6 +2777,7 @@ export class ServiceImpl<
       method: method,
       impl: impl,
     } as MethodImpl<unknown, unknown, RequestMeta, ResponseMeta>;
+    return this;
   }
 
   /**
