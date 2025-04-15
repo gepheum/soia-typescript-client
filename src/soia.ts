@@ -2702,7 +2702,7 @@ export class ServiceClient {
       );
     } else {
       let message = "";
-      if (responseData.type === "text/plain") {
+      if (/text\/plain\b/.test(responseData.type)) {
         message = `: ${await responseData.text()}`;
       }
       throw new Error(`HTTP response status ${httpResponse.status}${message}`);
