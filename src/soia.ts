@@ -2679,18 +2679,14 @@ export class ServiceClient {
     httpMethod: "GET" | "POST" = "POST",
   ): Promise<Response> {
     const requestJson = method.requestSerializer.toJsonCode(request);
+    const requestBody = [method.name, method.number, "", requestJson].join(":");
     const requestInit: RequestInit = { ...this.getRequestMetadata(method) };
     const url = new URL(this.serviceUrl);
     requestInit.method = httpMethod;
     if (httpMethod === "POST") {
-      requestInit.body = [method.name, method.number, "", requestJson].join(
-        ":",
-      );
+      requestInit.body = requestBody;
     } else {
-      url.searchParams.set("method", method.name);
-      url.searchParams.set("m", String(method.number));
-      url.searchParams.set("f", "");
-      url.searchParams.set("req", requestJson);
+      url.search = requestBody.replace(/%/g, "%25");
     }
     const httpResponse = await fetch(url, requestInit);
     const responseData = await httpResponse.blob();
@@ -2791,12 +2787,11 @@ export class ServiceImpl<
    */
   async handleRequest(
     reqBody: string,
-    getQueryParam: (name: string) => string | undefined,
     reqMeta: RequestMeta,
     resMeta: ResponseMeta,
     keepUnrecognizedFields?: "keep-unrecognized-fields",
   ): Promise<RawResponse> {
-    if (getQueryParam("list") !== undefined) {
+    if (reqBody === "list") {
       const json = {
         methods: Object.values(this.methodImpls).map((methodImpl) => ({
           method: methodImpl.method.name,
@@ -2810,31 +2805,17 @@ export class ServiceImpl<
       return new RawResponse(jsonCode, "ok-json");
     }
 
-    let methodName: string;
-    let format: string;
-    let requestData: string;
-
-    let methodNumberStr = getQueryParam("m");
-
-    if (methodNumberStr !== undefined) {
-      // A GET request.
-      methodName = getQueryParam("method") || "";
-      format = getQueryParam("f") || "";
-      requestData = getQueryParam("req") || "";
-    } else {
-      // A POST request.
-      const match = reqBody.match(/^([^:]*):([^:]*):([^:]*):([\S\s]*)$/);
-      if (!match) {
-        return new RawResponse(
-          "bad request: invalid request format",
-          "bad-request",
-        );
-      }
-      methodName = match[1]!;
-      methodNumberStr = match[2]!;
-      format = match[3]!;
-      requestData = match[4]!;
+    const match = reqBody.match(/^([^:]*):([^:]*):([^:]*):([\S\s]*)$/);
+    if (!match) {
+      return new RawResponse(
+        "bad request: invalid request format",
+        "bad-request",
+      );
     }
+    const methodName = match[1]!;
+    const methodNumberStr = match[2]!;
+    const format = match[3]!;
+    const requestData = match[4]!;
 
     if (!/-?[0-9]+/.test(methodNumberStr)) {
       return new RawResponse(
@@ -2911,16 +2892,16 @@ export function installServiceOnExpressApp(
     req: ExpressRequest,
     res: ExpressResponse,
   ): Promise<void> => {
-    const body = typeof req.body === "string" ? req.body : "";
-    const getQueryParam = (name: string): string | undefined => {
-      if (typeof req.query !== "object") return undefined;
-      const queryParam = req.query[name];
-      if (typeof queryParam !== "string") return undefined;
-      return queryParam;
-    };
+    let body: string;
+    const indexOfQuestionMark = req.originalUrl.indexOf("?");
+    if (indexOfQuestionMark >= 0) {
+      const queryString = req.originalUrl.substring(indexOfQuestionMark + 1);
+      body = decodeURIComponent(queryString);
+    } else {
+      body = typeof req.body === "string" ? req.body : "";
+    }
     const rawResponse = await serviceImpl.handleRequest(
       body,
-      getQueryParam,
       req,
       res,
       keepUnrecognizedFields,
