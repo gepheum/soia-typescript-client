@@ -2737,7 +2737,7 @@ export class RawResponse {
         return "application/json";
       case "bad-request":
       case "server-error":
-        return "text/plain";
+        return "text/plain; charset=utf-8";
       default: {
         throw new Error();
       }
