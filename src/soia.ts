@@ -2782,6 +2782,10 @@ export class ServiceImpl<
    * need to call this method, you can simply call the
    * `installServiceOnExpressApp()` top-level function.
    *
+   * If the request is a GET request, pass in the decoded query string as the
+   * request's body. The query string is the part of the URL after '?', and it
+   * can be decoded with DecodeURIComponent.
+   *
    * Pass in "keep-unrecognized-fields" if the request cannot come from a
    * malicious user.
    */
