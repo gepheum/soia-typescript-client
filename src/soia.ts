@@ -2701,7 +2701,7 @@ export class ServiceClient {
       if (/text\/plain\b/.test(responseData.type)) {
         message = `: ${await responseData.text()}`;
       }
-      throw new Error(`HTTP response status ${httpResponse.status}${message}`);
+      throw new Error(`HTTP status ${httpResponse.status}${message}`);
     }
   }
 }
@@ -2751,7 +2751,7 @@ export class RawResponse {
  *   - writing your own implementation of `installServiceOn*()` which calls
  *       `.handleRequest()` if you are using another web application framework
  */
-export class ServiceImpl<
+export class Service<
   RequestMeta = ExpressRequest,
   ResponseMeta = ExpressResponse,
 > {
@@ -2762,7 +2762,7 @@ export class ServiceImpl<
       reqMeta: RequestMeta,
       resMeta: ResponseMeta,
     ) => Promise<Response>,
-  ): ServiceImpl<RequestMeta, ResponseMeta> {
+  ): Service<RequestMeta, ResponseMeta> {
     const { number } = method;
     if (this.methodImpls[number]) {
       throw new Error(
@@ -2888,7 +2888,7 @@ interface MethodImpl<Request, Response, RequestMeta, ResponseMeta> {
 export function installServiceOnExpressApp(
   app: ExpressApp,
   queryPath: string,
-  serviceImpl: ServiceImpl<ExpressRequest, ExpressResponse>,
+  service: Service<ExpressRequest, ExpressResponse>,
   text: typeof ExpressText,
   keepUnrecognizedFields?: "keep-unrecognized-fields",
 ): void {
@@ -2904,7 +2904,7 @@ export function installServiceOnExpressApp(
     } else {
       body = typeof req.body === "string" ? req.body : "";
     }
-    const rawResponse = await serviceImpl.handleRequest(
+    const rawResponse = await service.handleRequest(
       body,
       req,
       res,
