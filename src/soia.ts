@@ -2678,6 +2678,7 @@ export class ServiceClient {
     request: Request,
     httpMethod: "GET" | "POST" = "POST",
   ): Promise<Response> {
+    this.lastRespHeaders = undefined;
     const requestJson = method.requestSerializer.toJsonCode(request);
     const requestBody = [method.name, method.number, "", requestJson].join(":");
     const requestInit: RequestInit = { ...this.getRequestMetadata(method) };
@@ -2689,6 +2690,7 @@ export class ServiceClient {
       url.search = requestBody.replace(/%/g, "%25");
     }
     const httpResponse = await fetch(url, requestInit);
+    this.lastRespHeaders = httpResponse.headers;
     const responseData = await httpResponse.blob();
     if (httpResponse.ok) {
       const jsonCode = await responseData.text();
@@ -2704,6 +2706,12 @@ export class ServiceClient {
       throw new Error(`HTTP status ${httpResponse.status}${message}`);
     }
   }
+
+  get lastResponseHeaders(): Headers | undefined {
+    return this.lastRespHeaders;
+  }
+
+  private lastRespHeaders: Headers | undefined;
 }
 
 /** Raw response returned by the server. */
