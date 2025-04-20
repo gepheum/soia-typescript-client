@@ -1,3 +1,5 @@
+[![npm](https://img.shields.io/npm/v/soia)](https://www.npmjs.com/package/soia)
+
 # Soia TypeScript Client
 
 Library imported from TypeScript code generated from soia files.
