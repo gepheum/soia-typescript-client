@@ -1,4 +1,5 @@
 [![npm](https://img.shields.io/npm/v/soia)](https://www.npmjs.com/package/soia)
+[![build](https://github.com/gepheum/soia-typescript-client/workflows/Build/badge.svg)](https://github.com/gepheum/soia-typescript-client/actions)
 
 # Soia TypeScript Client
 
