@@ -2664,7 +2664,7 @@ export class ServiceClient {
     private readonly serviceUrl: string,
     private readonly getRequestMetadata: (
       m: Method<unknown, unknown>,
-    ) => RequestMeta = () => ({}),
+    ) => Promise<RequestMeta> | RequestMeta = () => ({}),
   ) {
     const url = new URL(serviceUrl);
     if (url.search) {
@@ -2681,7 +2681,9 @@ export class ServiceClient {
     this.lastRespHeaders = undefined;
     const requestJson = method.requestSerializer.toJsonCode(request);
     const requestBody = [method.name, method.number, "", requestJson].join(":");
-    const requestInit: RequestInit = { ...this.getRequestMetadata(method) };
+    const requestInit: RequestInit = {
+      ...(await Promise.resolve(this.getRequestMetadata(method))),
+    };
     const url = new URL(this.serviceUrl);
     requestInit.method = httpMethod;
     if (httpMethod === "POST") {
