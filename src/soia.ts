@@ -2720,19 +2720,21 @@ export class ServiceClient {
 export class RawResponse {
   constructor(
     readonly data: string,
-    readonly type: "ok-json" | "bad-request" | "server-error",
+    readonly type: "ok-json" | "ok-html" | "bad-request" | "server-error",
   ) {}
 
   get statusCode(): number {
     switch (this.type) {
       case "ok-json":
+      case "ok-html":
         return 200;
       case "bad-request":
         return 400;
       case "server-error":
         return 500;
       default: {
-        throw new Error();
+        const _: never = this.type;
+        throw new Error(_);
       }
     }
   }
@@ -2741,15 +2743,34 @@ export class RawResponse {
     switch (this.type) {
       case "ok-json":
         return "application/json";
+      case "ok-html":
+        return "text/html; charset=utf-8";
       case "bad-request":
       case "server-error":
         return "text/plain; charset=utf-8";
       default: {
-        throw new Error();
+        const _: never = this.type;
+        throw new Error(_);
       }
     }
   }
 }
+
+// Copied from
+//   https://github.com/gepheum/restudio/blob/main/index.jsdeliver.html
+const RESTUDIO_HTML = `<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>RESTudio</title>
+    <script src="https://cdn.jsdelivr.net/npm/restudio/dist/restudio-standalone.js"></script>
+  </head>
+  <body style="margin: 0; padding: 0;">
+    <restudio-app></restudio-app>
+  </body>
+</html>
+`;
 
 /**
  * Implementation of a soia service.
@@ -2805,7 +2826,7 @@ export class Service<
     resMeta: ResponseMeta,
     keepUnrecognizedFields?: "keep-unrecognized-fields",
   ): Promise<RawResponse> {
-    if (reqBody === "list") {
+    if (reqBody === "" || reqBody === "list") {
       const json = {
         methods: Object.values(this.methodImpls).map((methodImpl) => ({
           method: methodImpl.method.name,
@@ -2817,6 +2838,8 @@ export class Service<
       };
       const jsonCode = JSON.stringify(json, undefined, "  ");
       return new RawResponse(jsonCode, "ok-json");
+    } else if (reqBody === "restudio") {
+      return new RawResponse(RESTUDIO_HTML, "ok-html");
     }
 
     const match = reqBody.match(/^([^:]*):([^:]*):([^:]*):([\S\s]*)$/);
