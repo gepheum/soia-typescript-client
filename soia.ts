@@ -445,7 +445,7 @@ export type TypeDescriptor<T = unknown> =
   | ArrayDescriptor<T>
   | StructDescriptor<T>
   | EnumDescriptor<T>
-  | PrimitiveDescriptor;
+  | PrimitiveDescriptor<T>;
 
 /** Specialization of `TypeDescriptor<T>` when `T` is known. */
 export type TypeDescriptorSpecialization<T> = //
@@ -479,7 +479,7 @@ interface TypeDescriptorBase {
 }
 
 /** Describes a primitive Soia type. */
-export interface PrimitiveDescriptor extends TypeDescriptorBase {
+export interface PrimitiveDescriptor<T> extends TypeDescriptorBase {
   kind: "primitive";
   primitive: keyof PrimitiveTypes;
 }
@@ -862,18 +862,16 @@ type DecodeNumberFn = (stream: InputStream) => number | bigint;
 
 // For wires [232, 241]
 const DECODE_NUMBER_FNS: readonly DecodeNumberFn[] = [
-  (s: InputStream): number => s.dataView.getUint16((s.offset += 2) - 2, true),
-  (s: InputStream): number => s.dataView.getUint32((s.offset += 4) - 4, true),
-  (s: InputStream): bigint =>
-    s.dataView.getBigUint64((s.offset += 8) - 8, true),
-  (stream: InputStream): number => stream.readUint8() - 256,
-  (s: InputStream): number =>
-    s.dataView.getUint16((s.offset += 2) - 2, true) - 65536,
-  (s: InputStream): number => s.dataView.getInt32((s.offset += 4) - 4, true),
-  (s: InputStream): bigint => s.dataView.getBigInt64((s.offset += 8) - 8, true),
-  (s: InputStream): bigint => s.dataView.getBigInt64((s.offset += 8) - 8, true),
-  (s: InputStream): number => s.dataView.getFloat32((s.offset += 4) - 4, true),
-  (s: InputStream): number => s.dataView.getFloat64((s.offset += 8) - 8, true),
+  (s: InputStream) => s.dataView.getUint16((s.offset += 2) - 2, true),
+  (s: InputStream) => s.dataView.getUint32((s.offset += 4) - 4, true),
+  (s: InputStream) => s.dataView.getBigUint64((s.offset += 8) - 8, true),
+  (stream: InputStream) => stream.readUint8() - 256,
+  (s: InputStream) => s.dataView.getUint16((s.offset += 2) - 2, true) - 65536,
+  (s: InputStream) => s.dataView.getInt32((s.offset += 4) - 4, true),
+  (s: InputStream) => s.dataView.getBigInt64((s.offset += 8) - 8, true),
+  (s: InputStream) => s.dataView.getBigInt64((s.offset += 8) - 8, true),
+  (s: InputStream) => s.dataView.getFloat32((s.offset += 4) - 4, true),
+  (s: InputStream) => s.dataView.getFloat64((s.offset += 8) - 8, true),
 ];
 
 function decodeNumber(stream: InputStream): number | bigint {
@@ -1165,10 +1163,9 @@ export function parseTypeDescriptor(json: Json): TypeDescriptor {
         return new OptionalSerializerImpl(parse(ts.value));
       case "primitive":
         return primitiveSerializer(ts.value) as InternalSerializer;
-      case "record": {
+      case "record":
         const recordId = ts.value;
         return recordBundles[recordId]!.serializer;
-      }
     }
   }
 
@@ -1236,7 +1233,7 @@ export function parseTypeDescriptor(json: Json): TypeDescriptor {
 
 abstract class AbstractPrimitiveSerializer<P extends keyof PrimitiveTypes>
   extends AbstractSerializer<PrimitiveTypes[P]>
-  implements PrimitiveDescriptor
+  implements PrimitiveDescriptor<PrimitiveTypes[P]>
 {
   readonly kind = "primitive";
 
@@ -1247,7 +1244,7 @@ abstract class AbstractPrimitiveSerializer<P extends keyof PrimitiveTypes>
     };
   }
 
-  addRecordDefinitionsTo(_out: { [k: string]: RecordDefinition }): void {}
+  addRecordDefinitionsTo(out: { [k: string]: RecordDefinition }) {}
 
   abstract readonly primitive: P;
 }
@@ -1260,7 +1257,7 @@ class BoolSerializer extends AbstractPrimitiveSerializer<"bool"> {
     return flavor === "readable" ? !!input : input ? 1 : 0;
   }
 
-  fromJson(json: Json): boolean {
+  fromJson(json: Json, keep?: "keep-unrecognized-fields"): boolean {
     return !!json;
   }
 
@@ -1281,7 +1278,7 @@ class Int32Serializer extends AbstractPrimitiveSerializer<"int32"> {
     return input | 0;
   }
 
-  fromJson(json: Json): number {
+  fromJson(json: Json, keep?: "keep-unrecognized-fields"): number {
     // `+value` will work if the input JSON value is a string, which is
     // what the int64 serializer produces.
     return +(json as number | string) | 0;
@@ -1332,7 +1329,7 @@ abstract class FloatSerializer<
     throw new TypeError();
   }
 
-  fromJson(json: Json): number {
+  fromJson(json: Json, keep?: "keep-unrecognized-fields"): number {
     return +(json as number | string);
   }
 
@@ -1377,7 +1374,7 @@ abstract class AbstractBigIntSerializer<
 > extends AbstractPrimitiveSerializer<P> {
   readonly defaultValue = BigInt(0);
 
-  fromJson(json: Json): bigint {
+  fromJson(json: Json, keep?: "keep-unrecognized-fields"): bigint {
     return BigInt(json as string | number);
   }
 }
@@ -1482,7 +1479,7 @@ class TimestampSerializer extends AbstractPrimitiveSerializer<"timestamp"> {
       : input.unixMillis;
   }
 
-  fromJson(json: Json): Timestamp {
+  fromJson(json: Json, keep?: "keep-unrecognized-fields"): Timestamp {
     return Timestamp.fromUnixMillis(
       typeof json === "number"
         ? json
@@ -1521,7 +1518,7 @@ class StringSerializer extends AbstractPrimitiveSerializer<"string"> {
     throw this.newTypeError(input);
   }
 
-  fromJson(json: Json): string {
+  fromJson(json: Json, keep?: "keep-unrecognized-fields"): string {
     if (typeof json === "string") {
       return json;
     }
@@ -1590,17 +1587,19 @@ class ByteStringSerializer extends AbstractPrimitiveSerializer<"bytes"> {
   readonly defaultValue = ByteString.EMPTY;
 
   toJson(input: ByteString, flavor?: JsonFlavor): string {
-    return flavor === "readable" ? "hex:" + input.toBase16() : input.toBase64();
+    return flavor === "readable"
+        ? "hex:" + input.toBase16()
+        : input.toBase64();
   }
 
-  fromJson(json: Json): ByteString {
+  fromJson(json: Json, keep?: "keep-unrecognized-fields"): ByteString {
     if (json === 0) {
       return ByteString.EMPTY;
     }
     const string = json as string;
     return string.startsWith("hex:")
-      ? ByteString.fromBase16(string.substring(4))
-      : ByteString.fromBase64(string);
+        ? ByteString.fromBase16(string.substring(4))
+        : ByteString.fromBase64(string);
   }
 
   encode(input: ByteString, stream: OutputStream): void {
@@ -1739,7 +1738,7 @@ class ArraySerializerImpl<Item>
     };
   }
 
-  addRecordDefinitionsTo(out: { [k: string]: RecordDefinition }): void {
+  addRecordDefinitionsTo(out: { [k: string]: RecordDefinition }) {
     this.itemSerializer.addRecordDefinitionsTo(out);
   }
 }
@@ -1797,7 +1796,7 @@ class OptionalSerializerImpl<Other>
     };
   }
 
-  addRecordDefinitionsTo(out: { [k: string]: RecordDefinition }): void {
+  addRecordDefinitionsTo(out: { [k: string]: RecordDefinition }) {
     this.otherSerializer.addRecordDefinitionsTo(out);
   }
 }
@@ -1845,12 +1844,10 @@ function decodeUnused(stream: InputStream): void {
       ++stream.offset;
       break;
     case 11: // string
-    case 13: {
-      // bytes
+    case 13: // bytes
       const length = decodeNumber(stream) as number;
       stream.offset += length;
       break;
-    }
     case 15: // array length==1
     case 19: // enum value kind==1
     case 20: // enum value kind==2
@@ -1880,7 +1877,7 @@ function decodeUnused(stream: InputStream): void {
 
 abstract class AbstractRecordSerializer<T, F> extends AbstractSerializer<T> {
   /** Uniquely identifies this record serializer. */
-  readonly token: symbol = Symbol();
+  readonly token: Symbol = Symbol();
   abstract kind: "struct" | "enum";
   name = "";
   modulePath = "";
@@ -1894,7 +1891,7 @@ abstract class AbstractRecordSerializer<T, F> extends AbstractSerializer<T> {
     parentType: StructDescriptor | EnumDescriptor | undefined,
     fields: readonly F[],
     removedNumbers: readonly number[],
-  ): void {
+  ) {
     this.name = name;
     this.modulePath = modulePath;
     this.parentType = parentType;
@@ -1906,7 +1903,7 @@ abstract class AbstractRecordSerializer<T, F> extends AbstractSerializer<T> {
 
   get qualifiedName(): string {
     const { name, parentType } = this;
-    return parentType ? `${parentType.name}.${name}` : name;
+    return parentType ? `${parentType.name}.${this.name}` : this.name;
   }
 
   abstract registerFields(fields: readonly F[]): void;
@@ -1938,7 +1935,7 @@ abstract class AbstractRecordSerializer<T, F> extends AbstractSerializer<T> {
 class UnrecognizedFields {
   constructor(
     /** Uniquely identifies the struct. */
-    readonly token: symbol,
+    readonly token: Symbol,
     /** Total number of fields in the struct. */
     readonly totalSlots: number,
     readonly json?: ReadonlyArray<Json>,
@@ -2203,7 +2200,7 @@ class StructSerializerImpl<T = unknown>
     return this.newMutableFn(initializer);
   }
 
-  registerFields(fields: ReadonlyArray<StructFieldImpl<T>>): void {
+  registerFields(fields: ReadonlyArray<StructFieldImpl<T>>) {
     for (const field of fields) {
       const { name, number, property } = field;
       this.fields.push(field);
@@ -2237,7 +2234,7 @@ class StructSerializerImpl<T = unknown>
 
 class UnrecognizedEnum {
   constructor(
-    readonly token: symbol,
+    readonly token: Symbol,
     readonly json?: Json,
     readonly bytes?: ByteString,
   ) {
@@ -2602,7 +2599,7 @@ function forPrivateUseError(t: unknown): Error {
 }
 
 export abstract class _FrozenBase {
-  protected constructor(privateKey: symbol) {
+  protected constructor(privateKey: Symbol) {
     if (privateKey !== PRIVATE_KEY) {
       throw forPrivateUseError(this);
     }
@@ -2625,7 +2622,7 @@ export abstract class _FrozenBase {
 
 export abstract class _EnumBase {
   protected constructor(
-    privateKey: symbol,
+    privateKey: Symbol,
     readonly kind: string,
     readonly value?: unknown,
     unrecognized?: UnrecognizedEnum,
@@ -2673,7 +2670,7 @@ export class ServiceClient {
     private readonly serviceUrl: string,
     private readonly getRequestMetadata: (
       m: Method<unknown, unknown>,
-    ) => Promise<RequestMeta> | RequestMeta = (): RequestMeta => ({}),
+    ) => Promise<RequestMeta> | RequestMeta = () => ({}),
   ) {
     const url = new URL(serviceUrl);
     if (url.search) {
@@ -2967,7 +2964,7 @@ export function installServiceOnExpressApp(
 
 interface StructSpec {
   kind: "struct";
-  ctor: { new (privateKey: symbol): unknown };
+  ctor: { new (privateKey: Symbol): unknown };
   initFn: (target: unknown, initializer: unknown) => void;
   name: string;
   parentCtor?: { new (): unknown };
@@ -2994,7 +2991,7 @@ interface EnumSpec<Enum = unknown> {
   kind: "enum";
   ctor: {
     new (
-      privateKey: symbol,
+      privateKey: Symbol,
       kind: string,
       value?: unknown,
       unrecognized?: UnrecognizedEnum,
@@ -3041,7 +3038,7 @@ const UNKNOWN_FIELD_SPEC: EnumFieldSpec = {
 export function _initModuleClasses(
   modulePath: string,
   records: ReadonlyArray<StructSpec | EnumSpec>,
-): void {
+) {
   const privateKey = PRIVATE_KEY;
 
   // First loop: add a SERIALIZER property to every record class.
@@ -3063,7 +3060,7 @@ export function _initModuleClasses(
         const mutableCtor = makeMutableClassForRecord(record, clazz.DEFAULT);
         clazz.Mutable = mutableCtor;
         // Define the 'create' static factory function.
-        const createFn = (initializer: unknown): unknown => {
+        const createFn = (initializer: unknown) => {
           if (initializer instanceof ctor) {
             return initializer;
           }
@@ -3079,7 +3076,7 @@ export function _initModuleClasses(
         clazz.SERIALIZER = new StructSerializerImpl(
           clazz.DEFAULT,
           createFn as (initializer: AnyRecord) => unknown,
-          () => new mutableCtor() as Freezable<unknown>,
+          (i) => new mutableCtor() as Freezable<unknown>,
         );
         break;
       }
@@ -3092,7 +3089,7 @@ export function _initModuleClasses(
           if (field.type) {
             continue;
           }
-          const property = enumConstantNameToProperty(field.name);
+          let property = enumConstantNameToProperty(field.name);
           clazz[property] = new record.ctor(PRIVATE_KEY, field.name);
         }
         // Define the 'create' static factory function.
@@ -3212,7 +3209,7 @@ function makeCreateEnumFunction(
   enumSpec: EnumSpec,
 ): (initializer: unknown) => unknown {
   const { ctor, createValueFn } = enumSpec;
-  const createValue = createValueFn || ((): undefined => undefined);
+  const createValue = createValueFn || (() => undefined);
   const privateKey = PRIVATE_KEY;
   return (initializer: unknown) => {
     if (initializer instanceof ctor) {
@@ -3294,7 +3291,7 @@ const arraysReturnedByMutableGetters = new WeakMap<
 >();
 
 function makeMutableGetterFn(field: StructFieldSpec): () => unknown {
-  const { property, type } = field;
+  let { property, type } = field;
   switch (type.kind) {
     case "array": {
       class Class {
@@ -3318,7 +3315,7 @@ function makeMutableGetterFn(field: StructFieldSpec): () => unknown {
       ) => unknown;
       class Class {
         static ret(): unknown {
-          const value = this[property];
+          let value = this[property];
           if (value instanceof mutableCtor) {
             return value;
           }
@@ -3339,7 +3336,7 @@ function makeSearchMethod(field: StructFieldSpec): (key: unknown) => unknown {
   const { property } = field;
   const indexable = field.indexable!;
   const { keyFn } = indexable;
-  const keyToHashable = indexable.keyToHashable ?? ((e: unknown): unknown => e);
+  const keyToHashable = indexable.keyToHashable ?? ((e: unknown) => e);
   class Class {
     ret(key: unknown): unknown {
       const array = this[property] as ReadonlyArray<unknown>;

@@ -1,7 +1,7 @@
-import { SerializerTester } from "./serializer_tester.js";
-import * as soia from "./soia.js";
 import { expect } from "buckwheat";
 import { describe, it } from "mocha";
+import { SerializerTester } from "./serializer_tester.js";
+import * as soia from "./soia.js";
 
 describe("Timestamp", () => {
   it("#MIN is min timestamp rerpresentable as Date objects", () => {
@@ -150,7 +150,7 @@ describe("timestamp serializer", () => {
 });
 
 describe("ByteString", () => {
-  const makeTestByteArray = (length = 4, start = 0) => {
+  const makeTestByteArray = (length = 4, start = 0): Uint8Array => {
     const array: number[] = [];
     for (let i = 0; i < length; ++i) {
       array[i] = start + i;
@@ -158,16 +158,16 @@ describe("ByteString", () => {
     return new Uint8Array(array);
   };
 
-  const makeTestByteString = (length = 4, start = 0) => {
+  const makeTestByteString = (length = 4, start = 0): soia.ByteString => {
     return soia.ByteString.sliceOf(makeTestByteArray(length, start).buffer);
   };
 
-  const makeSlicedTestByteString = (length = 4) => {
+  const makeSlicedTestByteString = (length = 4): soia.ByteString => {
     const superByteString = makeTestByteString(length + 2, -1);
     return soia.ByteString.sliceOf(superByteString, 1, length + 1);
   };
 
-  const toArray = (byteString: soia.ByteString) => {
+  const toArray = (byteString: soia.ByteString): number[] => {
     return Array.from(new Uint8Array(byteString.toBuffer()));
   };
 
@@ -784,10 +784,12 @@ describe("bytes serializer", () => {
 
   tester.reserializeAndAssert(soia.ByteString.fromBase64("abc123"), {
     denseJson: "abc12w==",
+    readableJson: "hex:69b735db",
     bytesAsBase16: "f50469b735db",
   });
   tester.reserializeAndAssert(soia.ByteString.EMPTY, {
     denseJson: "",
+    readableJson: "hex:",
     bytesAsBase16: "f4",
   });
   tester.deserializeZeroAndAssert((s) => s.byteLength === 0);
@@ -939,6 +941,7 @@ describe("bytes array serializer", () => {
 
   tester.reserializeAndAssert([a, b], {
     denseJson: [a.toBase64(), b.toBase64()],
+    readableJson: ["hex:6c696768742077", "hex:6c6967687420776f"],
     bytesAsBase16: "f8f5076c696768742077f5086c6967687420776f",
   });
 });

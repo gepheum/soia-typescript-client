@@ -1,13 +1,13 @@
+import { expect } from "buckwheat";
+import { describe, it } from "mocha";
 import {
+  parseTypeDescriptor,
   type Json,
   type JsonFlavor,
   type MutableForm,
   type Serializer,
   type TypeDescriptor,
-  parseTypeDescriptor,
 } from "./soia.js";
-import { expect } from "buckwheat";
-import { describe, it } from "mocha";
 
 export class SerializerTester<T> {
   constructor(readonly serializer: Serializer<T>) {}
@@ -24,7 +24,7 @@ export class SerializerTester<T> {
       lossy?: true;
     },
     description?: string,
-  ) {
+  ): void {
     const { serializer } = this;
 
     describe(description ?? `reserialize ${input}`, () => {
@@ -107,19 +107,21 @@ export class SerializerTester<T> {
           reparse: boolean,
           sourceFormat: Format,
           targetFormat: Format,
-        ) => {
+        ): void => {
           let typeDescriptor: TypeDescriptor = serializer.typeDescriptor;
           if (reparse) {
             typeDescriptor = parseTypeDescriptor(typeDescriptor.asJson());
           }
-          const serialize = (format: JsonFlavor | "bytes") =>
+          const serialize = (
+            format: JsonFlavor | "bytes",
+          ): Json | ArrayBuffer =>
             format === "bytes"
               ? serializer.toBytes(input).toBuffer()
               : serializer.toJson(input, format);
           const source = serialize(sourceFormat);
           const target = serialize(targetFormat);
           const transformed = typeDescriptor.transform(source, targetFormat);
-          const arrayBufferToBase16 = (a: unknown) =>
+          const arrayBufferToBase16 = (a: Json | ArrayBuffer): Json =>
             a instanceof ArrayBuffer ? toBase16(a) : a;
           const parsedPrefix = reparse ? "parseTypeDescriptor then " : "";
           it(`${parsedPrefix}transform ${sourceFormat} -> ${targetFormat}`, () => {
