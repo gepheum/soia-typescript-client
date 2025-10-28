@@ -105,6 +105,10 @@ describe("timestamp serializer", () => {
     tester.reserializeTypeAdapterAndAssertNoLoss();
   });
 
+  it("can deserialize any number", () => {
+    expect(serializer.fromJson("888888888888").unixMillis).toBe(888888888888);
+  });
+
   tester.reserializeAndAssert(
     soia.Timestamp.UNIX_EPOCH,
     {
@@ -240,6 +244,18 @@ describe("ByteString", () => {
       const byteString = soia.ByteString.sliceOf(array.buffer);
       array[3] = 4;
       expect(toArray(byteString)).toMatch([0, 1, 2, 3]);
+    });
+
+    it("works with SharedArrayBuffer", () => {
+      const sharedBuffer = new SharedArrayBuffer(4);
+      const view = new Uint8Array(sharedBuffer);
+      view[0] = 10;
+      view[1] = 20;
+      view[2] = 30;
+      view[3] = 40;
+      const byteString = soia.ByteString.sliceOf(sharedBuffer);
+      expect(byteString.byteLength).toBe(4);
+      expect(toArray(byteString)).toMatch([10, 20, 30, 40]);
     });
   });
 
@@ -496,6 +512,10 @@ describe("int64 serializer", () => {
     tester.reserializeTypeAdapterAndAssertNoLoss();
   });
 
+  it("can deserialize any number", () => {
+    expect(serializer.fromJson(3.14)).toBe(BigInt(3));
+  });
+
   tester.reserializeAndAssert(BigInt("888888888888"), {
     denseJson: 888888888888,
     bytesAsBase16: "ee380ee8f5ce000000",
@@ -548,6 +568,10 @@ describe("uint64 serializer", () => {
     tester.reserializeTypeAdapterAndAssertNoLoss();
   });
 
+  it("can deserialize any number", () => {
+    expect(serializer.fromJson(3.14)).toBe(BigInt(3));
+  });
+
   tester.reserializeAndAssert(BigInt("888888888888"), {
     denseJson: 888888888888,
     bytesAsBase16: "ea380ee8f5ce000000",
@@ -598,6 +622,13 @@ describe("float32 serializer", () => {
       records: [],
     });
     tester.reserializeTypeAdapterAndAssertNoLoss();
+  });
+
+  it("can deserialize any number", () => {
+    expect(serializer.fromJson("1111111111")).toMatch(1111111111);
+    expect(
+      serializer.fromJson("1111111111111111111111111111111111111111"),
+    ).toMatch(1.1111111111111112e39);
   });
 
   tester.reserializeAndAssert(2, {

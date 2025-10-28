@@ -135,7 +135,7 @@ export class ByteString {
    * const byteString = ByteString.sliceOf(arrayBuffer);
    */
   static sliceOf(
-    input: ArrayBuffer | ByteString,
+    input: ArrayBuffer | SharedArrayBuffer | ByteString,
     start = 0,
     end?: number,
   ): ByteString {
@@ -161,8 +161,14 @@ export class ByteString {
       }
     } else if (input instanceof ArrayBuffer) {
       return new ByteString(input.slice(start, end));
+    } else if (input instanceof SharedArrayBuffer) {
+      const slice = input.slice(start, end);
+      const newBuffer = new ArrayBuffer(slice.byteLength);
+      new Uint8Array(newBuffer).set(new Uint8Array(slice));
+      return new ByteString(newBuffer);
     } else {
-      throw new TypeError();
+      const _: never = input;
+      throw new TypeError(_);
     }
   }
 
@@ -842,14 +848,14 @@ interface InternalSerializer<T = unknown> extends Serializer<T> {
 /** Parameter of the {@link InternalSerializer.decode} method. */
 class InputStream {
   constructor(
-    readonly dataView: DataView,
+    readonly buffer: ArrayBuffer,
     keep?: "keep-unrecognized-fields",
   ) {
-    this.buffer = dataView.buffer;
+    this.dataView = new DataView(buffer);
     this.keepUnrecognizedFields = !!keep;
   }
 
-  readonly buffer: ArrayBuffer;
+  readonly dataView: DataView;
   readonly keepUnrecognizedFields: boolean;
   offset = 0;
 
@@ -879,6 +885,11 @@ const DECODE_NUMBER_FNS: readonly DecodeNumberFn[] = [
 function decodeNumber(stream: InputStream): number | bigint {
   const wire = stream.readUint8();
   return wire < 232 ? wire : DECODE_NUMBER_FNS[wire - 232]!(stream);
+}
+
+function decodeBigInt(stream: InputStream): bigint {
+  const number = decodeNumber(stream);
+  return typeof number === "bigint" ? number : BigInt(number | 0);
 }
 
 /** Parameter of the {@link InternalSerializer.encode} method. */
@@ -937,7 +948,7 @@ class OutputStream implements BinaryForm {
     //   - If there was not enough room, try again one last time.
     //
     // See https://developer.mozilla.org/en-US/docs/Web/API/TextEncoder
-    let { dataView } = this;
+    let dataView: DataView = this.dataView;
     let result = 0;
     while (string) {
       const encodeResult = textEncoder.encodeInto(
@@ -959,10 +970,10 @@ class OutputStream implements BinaryForm {
     //   - First, fill the current buffer as much as possible
     //   - If there is not enough room, allocate a new buffer of N bytes, where
     //       N is at least the number of bytes left in the byte string.
-    const { dataView } = this;
-    const bytesLeftInCurrentBuffer = dataView.buffer.byteLength - this.offset;
+    const { buffer } = this;
+    const bytesLeftInCurrentBuffer = buffer.byteLength - this.offset;
     const head = ByteString.sliceOf(bytes, 0, bytesLeftInCurrentBuffer);
-    head.copyTo(dataView.buffer, this.offset);
+    head.copyTo(buffer, this.offset);
     this.offset += head.byteLength;
     const remainingBytes = bytes.byteLength - head.byteLength;
     if (remainingBytes <= 0) {
@@ -970,7 +981,8 @@ class OutputStream implements BinaryForm {
       return;
     }
     const tail = ByteString.sliceOf(bytes, remainingBytes);
-    tail.copyTo(this.reserve(remainingBytes).buffer, this.offset);
+    this.reserve(remainingBytes);
+    tail.copyTo(buffer, this.offset);
     this.offset += remainingBytes;
   }
 
@@ -997,15 +1009,15 @@ class OutputStream implements BinaryForm {
 
   /** Returns a data view with enough capacity for `bytes` more bytes. */
   private reserve(bytes: number): DataView {
-    const { dataView } = this;
-    if (this.offset < dataView.buffer.byteLength - bytes) {
+    if (this.offset < this.buffer.byteLength - bytes) {
       // Enough room in the current data view.
-      return dataView;
+      return this.dataView;
     }
     this.flush();
     const lengthInBytes = Math.max(this.byteLength, bytes);
     this.offset = 0;
-    return (this.dataView = new DataView(new ArrayBuffer(lengthInBytes)));
+    this.buffer = new ArrayBuffer(lengthInBytes);
+    return (this.dataView = new DataView(this.buffer));
   }
 
   /** Adds the current buffer to `pieces`. Updates `byteLength` accordingly. */
@@ -1015,7 +1027,8 @@ class OutputStream implements BinaryForm {
     this.byteLength += offset;
   }
 
-  dataView = new DataView(new ArrayBuffer(128));
+  buffer = new ArrayBuffer(128);
+  dataView = new DataView(this.buffer);
   offset = 0;
   // The final binary form is the result of concatenating these arrays.
   // The length of each array is approximately twice the length of the previous
@@ -1045,7 +1058,7 @@ abstract class AbstractSerializer<T> implements InternalSerializer<T> {
   }
 
   fromBytes(bytes: ArrayBuffer, keep?: "keep-unrecognized-fields"): T {
-    const inputStream = new InputStream(new DataView(bytes), keep);
+    const inputStream = new InputStream(bytes, keep);
     inputStream.offset = 4; // Skip the "soia" header.
     return this.decode(inputStream);
   }
@@ -1378,7 +1391,15 @@ abstract class AbstractBigIntSerializer<
   readonly defaultValue = BigInt(0);
 
   fromJson(json: Json): bigint {
-    return BigInt(json as string | number);
+    try {
+      return BigInt(json as number | string);
+    } catch (e) {
+      if (typeof json === "number") {
+        return BigInt(Math.round(json));
+      } else {
+        throw e;
+      }
+    }
   }
 }
 
@@ -1422,7 +1443,7 @@ class Int64Serializer extends AbstractBigIntSerializer<"int64"> {
   }
 
   decode(stream: InputStream): bigint {
-    return BigInt(decodeNumber(stream));
+    return decodeBigInt(stream);
   }
 }
 
@@ -1457,7 +1478,7 @@ class Uint64Serializer extends AbstractBigIntSerializer<"uint64"> {
   }
 
   decode(stream: InputStream): bigint {
-    return BigInt(decodeNumber(stream));
+    return decodeBigInt(stream);
   }
 }
 
@@ -1486,7 +1507,9 @@ class TimestampSerializer extends AbstractPrimitiveSerializer<"timestamp"> {
     return Timestamp.fromUnixMillis(
       typeof json === "number"
         ? json
-        : (json as TimestampReadableJson)["unix_millis"],
+        : typeof json === "string"
+            ? +json
+            : (json as TimestampReadableJson)["unix_millis"],
     );
   }
 
@@ -1502,7 +1525,7 @@ class TimestampSerializer extends AbstractPrimitiveSerializer<"timestamp"> {
 
   decode(stream: InputStream): Timestamp {
     const unixMillis = decodeNumber(stream);
-    return Timestamp.fromUnixMillis(Number(BigInt(unixMillis)));
+    return Timestamp.fromUnixMillis(Number(unixMillis));
   }
 
   isDefault(input: Timestamp): boolean {
