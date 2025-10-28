@@ -1508,8 +1508,8 @@ class TimestampSerializer extends AbstractPrimitiveSerializer<"timestamp"> {
       typeof json === "number"
         ? json
         : typeof json === "string"
-            ? +json
-            : (json as TimestampReadableJson)["unix_millis"],
+          ? +json
+          : (json as TimestampReadableJson)["unix_millis"],
     );
   }
 
