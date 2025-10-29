@@ -349,6 +349,16 @@ describe("bool serializer", () => {
     tester.reserializeTypeAdapterAndAssertNoLoss();
   });
 
+  it("from number", () => {
+    expect(serializer.fromJsonCode("888888")).toBe(true);
+    expect(serializer.fromJsonCode('"0"')).toBe(false);
+    expect(
+      serializer.fromBytes(
+        soia.primitiveSerializer("int32").toBytes(888888).toBuffer(),
+      ),
+    ).toBe(true);
+  });
+
   tester.reserializeAndAssert(true, {
     denseJson: 1,
     readableJson: true,

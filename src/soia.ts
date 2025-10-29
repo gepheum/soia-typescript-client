@@ -1274,7 +1274,7 @@ class BoolSerializer extends AbstractPrimitiveSerializer<"bool"> {
   }
 
   fromJson(json: Json): boolean {
-    return !!json;
+    return !!json && json !== "0";
   }
 
   encode(input: boolean, stream: OutputStream): void {
@@ -1282,7 +1282,7 @@ class BoolSerializer extends AbstractPrimitiveSerializer<"bool"> {
   }
 
   decode(stream: InputStream): boolean {
-    return !!stream.readUint8();
+    return !!decodeNumber(stream);
   }
 }
 
