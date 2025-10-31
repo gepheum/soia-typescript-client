@@ -753,39 +753,6 @@ export interface Freezable<T> {
   toFrozen(): T;
 }
 
-/**
- * Every generated frozen class has a `create` static method which expects a
- * `WholeOrPartial<Struct.Initializer, Accept>` parameter. If `Accept` is
- * `"whole"`, then the compiler requires the object parameter to have a value
- * set for each field of the struct. Otherwise (the default), the compiler
- * accepts any subset of the fields of the struct. Every missing field will be
- * assigned a default value (zero, empty string, etc.) in the returned object.
- *
- * @example
- * console.log(
- *   FullName.create({first: "Jane"}).toString(),
- * );
- * // Output: {
- * //   "first": "Jane",
- * //   "last": ""
- * // }
- *
- * // COMPILE-TIME ERROR
- * // FullName.create<"whole">({first: "Jane"});
- *
- * console.log(
- *   FullName.create<"whole">({first: "Jane", last: "Doe"}).toString(),
- * );
- * // Output: {
- * //   "first": "Jane",
- * //   "last": "Doe"
- * // }
- */
-export type WholeOrPartial<
-  Initializer,
-  Accept extends "partial" | "whole",
-> = Accept extends "partial" ? Initializer : Required<Initializer>;
-
 // =============================================================================
 // Implementation of serializers and type descriptors
 // =============================================================================
