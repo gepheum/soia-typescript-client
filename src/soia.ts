@@ -2215,8 +2215,8 @@ class StructSerializerImpl<T = unknown>
   fieldDefinitions(): FieldDefinition[] {
     return this.fields.map((f) => ({
       name: f.name,
-      type: f.serializer.typeSignature,
       number: f.number,
+      type: f.serializer.typeSignature,
     }));
   }
 
