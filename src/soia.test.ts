@@ -586,6 +586,10 @@ describe("uint64 serializer", () => {
     denseJson: 888888888888,
     bytesAsBase16: "ea380ee8f5ce000000",
   });
+  tester.reserializeAndAssert(BigInt("4294967295"), {
+    denseJson: 4294967295,
+    bytesAsBase16: "e9ffffffff",
+  });
   // Numbers outside of bounds are clamped.
   tester.reserializeAndAssert(BigInt("18446744073709551616"), {
     denseJson: "18446744073709551615",

@@ -856,7 +856,7 @@ function decodeNumber(stream: InputStream): number | bigint {
 
 function decodeBigInt(stream: InputStream): bigint {
   const number = decodeNumber(stream);
-  return typeof number === "bigint" ? number : BigInt(number | 0);
+  return typeof number === "bigint" ? number : BigInt(Math.round(number));
 }
 
 /** Parameter of the {@link InternalSerializer.encode} method. */
