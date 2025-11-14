@@ -1163,8 +1163,8 @@ export function parseTypeDescriptor(json: Json): TypeDescriptor {
     const qualifiedName = idParts[1]!;
     const nameParts = qualifiedName.split(".");
     const name = nameParts[nameParts.length - 1]!;
-    const parentType =
-      recordBundles[nameParts.slice(0, -1).join(".")]?.serializer;
+    const parentId = module + ":" + nameParts.slice(0, -1).join(".");
+    const parentType = recordBundles[parentId]?.serializer;
     switch (definition.kind) {
       case "struct": {
         const fields: StructFieldImpl[] = [];
