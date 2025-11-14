@@ -635,7 +635,10 @@ export interface EnumDescriptor<T = unknown> extends TypeDescriptorBase {
    * Undefined if the struct is defined at the top-level of the module.
    */
   readonly parentType: StructDescriptor | EnumDescriptor | undefined;
-  /** The fields of the enum in the order they appear in the `.soia` file. */
+  /**
+   * Includes the UNKNOWN field, followed by the other fields in the order they
+   * appear in the `.soia` file.
+   */
   readonly fields: ReadonlyArray<EnumField<T>>;
   /** The field numbers marked as removed. */
   readonly removedNumbers: ReadonlySet<number>;
@@ -773,7 +776,7 @@ type TypeSignature =
       kind: "array";
       value: {
         item: TypeSignature;
-        key_chain?: string;
+        key_extractor?: string;
       };
     }
   | {
@@ -800,7 +803,7 @@ type RecordDefinition = {
   kind: "struct" | "enum";
   id: string;
   fields: readonly FieldDefinition[];
-  removed_fields?: ReadonlyArray<number>;
+  removed_numbers?: ReadonlyArray<number>;
 };
 
 interface InternalSerializer<T = unknown> extends Serializer<T> {
@@ -1138,8 +1141,8 @@ export function parseTypeDescriptor(json: Json): TypeDescriptor {
   function parse(ts: TypeSignature): InternalSerializer {
     switch (ts.kind) {
       case "array": {
-        const { item, key_chain } = ts.value;
-        return new ArraySerializerImpl(parse(item), key_chain);
+        const { item, key_extractor } = ts.value;
+        return new ArraySerializerImpl(parse(item), key_extractor);
       }
       case "optional":
         return new OptionalSerializerImpl(parse(ts.value));
@@ -1157,7 +1160,7 @@ export function parseTypeDescriptor(json: Json): TypeDescriptor {
   for (const recordBundle of Object.values(recordBundles)) {
     const { definition, serializer } = recordBundle;
     const { defaultValue } = serializer;
-    const { id, removed_fields } = definition;
+    const { id, removed_numbers } = definition;
     const idParts = id.split(":");
     const module = idParts[0]!;
     const qualifiedName = idParts[1]!;
@@ -1177,7 +1180,7 @@ export function parseTypeDescriptor(json: Json): TypeDescriptor {
         }
         const s = serializer as StructSerializerImpl<Json>;
         initOps.push(() =>
-          s.init(name, module, parentType, fields, removed_fields ?? []),
+          s.init(name, module, parentType, fields, removed_numbers ?? []),
         );
         break;
       }
@@ -1200,7 +1203,7 @@ export function parseTypeDescriptor(json: Json): TypeDescriptor {
                 } as EnumConstantField<Json>),
           );
         initOps.push(() =>
-          s.init(name, module, parentType, fields, removed_fields ?? []),
+          s.init(name, module, parentType, fields, removed_numbers ?? []),
         );
         break;
       }
@@ -1660,7 +1663,7 @@ class ArraySerializerImpl<Item>
 {
   constructor(
     readonly itemSerializer: InternalSerializer<Item>,
-    readonly keyChain?: string,
+    readonly keyExtractor?: string,
   ) {
     super();
   }
@@ -1724,7 +1727,7 @@ class ArraySerializerImpl<Item>
       kind: "array",
       value: {
         item: this.itemSerializer.typeSignature,
-        key_chain: this.keyChain,
+        key_extractor: this.keyExtractor,
       },
     };
   }
@@ -1912,7 +1915,7 @@ abstract class AbstractRecordSerializer<T, F> extends AbstractSerializer<T> {
       fields: this.fieldDefinitions(),
     };
     if (this.removedNumbers.size) {
-      recordDefinition.removed_fields = [...this.removedNumbers];
+      recordDefinition.removed_numbers = [...this.removedNumbers];
     }
     out[recordId] = recordDefinition;
     for (const dependency of this.dependencies()) {
@@ -3192,8 +3195,6 @@ function enumConstantNameToProperty(name: string): string {
       return "UNKNOWN";
     case "SERIALIZER":
       return "SERIALIZER_";
-    case "UNKNOWN":
-      return "UNKNOWN_";
   }
   return name;
 }
