@@ -105,6 +105,25 @@ describe("timestamp serializer", () => {
     tester.reserializeTypeAdapterAndAssertNoLoss();
   });
 
+  it("TypeDescriptor#asJsonCode()", () => {
+    expect(serializer.typeDescriptor.asJsonCode()).toMatch(
+      [
+        "{",
+        '  "type": {',
+        '    "kind": "primitive",',
+        '    "value": "timestamp"',
+        "  },",
+        '  "records": []',
+        "}",
+      ].join("\n"),
+    );
+    expect(
+      soia
+        .parseTypeDescriptorFromJsonCode(serializer.typeDescriptor.asJsonCode())
+        .asJson(),
+    ).toMatch(serializer.typeDescriptor.asJson());
+  });
+
   it("can deserialize any number", () => {
     expect(serializer.fromJson("888888888888").unixMillis).toBe(888888888888);
   });

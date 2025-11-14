@@ -1,7 +1,7 @@
 import { expect } from "buckwheat";
 import { describe, it } from "mocha";
 import {
-  parseTypeDescriptor,
+  parseTypeDescriptorFromJson,
   type Json,
   type JsonFlavor,
   type MutableForm,
@@ -110,7 +110,9 @@ export class SerializerTester<T> {
         ): void => {
           let typeDescriptor: TypeDescriptor = serializer.typeDescriptor;
           if (reparse) {
-            typeDescriptor = parseTypeDescriptor(typeDescriptor.asJson());
+            typeDescriptor = parseTypeDescriptorFromJson(
+              typeDescriptor.asJson(),
+            );
           }
           const serialize = (
             format: JsonFlavor | "bytes",
@@ -166,7 +168,7 @@ export class SerializerTester<T> {
   reserializeTypeAdapterAndAssertNoLoss(): void {
     it("reserialize type adapter", () => {
       const json = this.serializer.typeDescriptor.asJson();
-      const reserialized = parseTypeDescriptor(json);
+      const reserialized = parseTypeDescriptorFromJson(json);
       expect(reserialized.asJson()).toMatch(json);
       expect(json).toMatch(reserialized.asJson());
     });

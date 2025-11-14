@@ -462,8 +462,14 @@ export type TypeDescriptorSpecialization<T> = //
       : TypeDescriptor<T>;
 
 interface TypeDescriptorBase {
-  /** Returns a JSON representation of this `TypeDescriptor`. */
+  /** Returns the JSON representation of this `TypeDescriptor`. */
   asJson(): Json;
+
+  /**
+   * Returns the JSON code representation of this `TypeDescriptor`.
+   * Same as calling `JSON.stringify()` on the result of `asJson()`.
+   */
+  asJsonCode(): string;
 
   /**
    * Converts from one serialized form to another.
@@ -1073,6 +1079,10 @@ abstract class AbstractSerializer<T> implements InternalSerializer<T> {
     return result;
   }
 
+  asJsonCode(): string {
+    return JSON.stringify(this.asJson(), undefined, "  ");
+  }
+
   transform(json_or_bytes: Json | ArrayBuffer, out: JsonFlavor): Json;
   transform(json: Json, out: "bytes"): ArrayBuffer;
   transform(
@@ -1099,7 +1109,7 @@ const UNKNOWN_FIELD_DEFINITION: FieldDefinition = {
  * Returns a `TypeDescriptor` from its JSON representation as returned by
  * `asJson()`.
  */
-export function parseTypeDescriptor(json: Json): TypeDescriptor {
+export function parseTypeDescriptorFromJson(json: Json): TypeDescriptor {
   const typeDefinition = json as TypeDefinition;
 
   type RecordBundle = {
@@ -1215,6 +1225,14 @@ export function parseTypeDescriptor(json: Json): TypeDescriptor {
   initOps.forEach((op) => op());
 
   return parse(typeDefinition.type).typeDescriptor;
+}
+
+/**
+ * Returns a `TypeDescriptor` from its JSON code representation as returned by
+ * `asJsonCode()`.
+ */
+export function parseTypeDescriptorFromJsonCode(code: string): TypeDescriptor {
+  return parseTypeDescriptorFromJson(JSON.parse(code));
 }
 
 abstract class AbstractPrimitiveSerializer<P extends keyof PrimitiveTypes>
