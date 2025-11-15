@@ -662,11 +662,11 @@ export interface EnumDescriptor<T = unknown> extends TypeDescriptorBase {
 /**
  * Field of a Soia enum. Fields which don't hold any value are called constant
  * fields. Their name is always in UPPER_CASE. Fields which hold value of a
- * given type are called value fields, and their name is always in lower_case.
+ * given type are called wrapper fields, and their name is always in lower_case.
  */
 export type EnumField<Enum = unknown> =
   | EnumConstantField<Enum>
-  | EnumValueField<Enum, unknown>;
+  | EnumWrapperField<Enum, unknown>;
 
 /** Field of a Soia enum which does not hold any value. */
 export interface EnumConstantField<Enum = unknown> {
@@ -679,12 +679,12 @@ export interface EnumConstantField<Enum = unknown> {
   readonly number: number;
   /** The instance of the generated class which corresponds to this field. */
   readonly constant: Enum;
-  /** Always undefined, unlike the `type` field of `EnumValueField`. */
+  /** Always undefined, unlike the `type` field of `EnumWrapperField`. */
   readonly type?: undefined;
 }
 
 /** Field of a Soia enum which holds a value of a given type. */
-export interface EnumValueField<Enum = unknown, Value = unknown> {
+export interface EnumWrapperField<Enum = unknown, Value = unknown> {
   /**
    * Field name as specified in the `.soia` file, e.g. "v4".
    * Always in lower_case format.
@@ -1200,7 +1200,7 @@ export function parseTypeDescriptorFromJson(json: Json): TypeDescriptor {
           .concat(definition.fields)
           .map((f) =>
             f.type
-              ? new EnumValueFieldImpl<Json>(
+              ? new EnumWrapperFieldImpl<Json>(
                   f.name,
                   f.number,
                   parse(f.type),
@@ -1670,7 +1670,7 @@ class StructFieldImpl<Struct = unknown, Value = unknown>
 
 type EnumFieldImpl<Enum = unknown> =
   | EnumConstantFieldImpl<Enum>
-  | EnumValueFieldImpl<Enum, unknown>;
+  | EnumWrapperFieldImpl<Enum, unknown>;
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
@@ -2260,7 +2260,7 @@ interface EnumConstantFieldImpl<Enum> extends EnumConstantField<Enum> {
   readonly serializer?: undefined;
 }
 
-class EnumValueFieldImpl<Enum, Value = unknown> {
+class EnumWrapperFieldImpl<Enum, Value = unknown> {
   constructor(
     readonly name: string,
     readonly number: number,
@@ -2347,7 +2347,7 @@ class EnumSerializerImpl<T = unknown>
           : this.createFn(new UnrecognizedEnum(this.token, copyJson(json)));
       }
       if (field.serializer) {
-        throw new Error(`refers to a value field: ${json}`);
+        throw new Error(`refers to a wrapper field: ${json}`);
       }
       return field.constant;
     }
@@ -2400,7 +2400,7 @@ class EnumSerializerImpl<T = unknown>
     const field = this.fieldMapping[kind]!;
     const { number, serializer } = field;
     if (serializer) {
-      // A value field.
+      // A wrapper field.
       const value = (input as AnyRecord).value;
       if (number < 5) {
         // The number can't be 0 or else kind == "?".
@@ -2437,7 +2437,7 @@ class EnumSerializerImpl<T = unknown>
         }
       }
       if (field.serializer) {
-        throw new Error(`refers to a value field: ${number}`);
+        throw new Error(`refers to a wrapper field: ${number}`);
       }
       return field.constant;
     } else {
@@ -3179,7 +3179,7 @@ export function _initModuleClasses(
         const serializer = clazz.SERIALIZER as EnumSerializerImpl;
         const fields = record.fields.map((f) =>
           f.type
-            ? new EnumValueFieldImpl(
+            ? new EnumWrapperFieldImpl(
                 f.name,
                 f.number,
                 getSerializerForType(f.type) as InternalSerializer,
@@ -3245,7 +3245,7 @@ function makeCreateEnumFunction(
     }
     const value = createValue(initializer);
     if (value === undefined) {
-      throw new Error(`Value field not found: ${kind}`);
+      throw new Error(`Wrapper field not found: ${kind}`);
     }
     return new ctor(privateKey, kind, value);
   };
