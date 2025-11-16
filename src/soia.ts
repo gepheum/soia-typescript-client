@@ -311,13 +311,13 @@ export interface BinaryForm {
  * @example
  * const jane = Person.create({firstName: "Jane", lastName: "Doe"});
  *
- * console.log(Person.SERIALIZER.toJson(jane, "dense"));
+ * console.log(Person.serializer.toJson(jane, "dense"));
  * // Output: ["Jane","Doe"]
  *
- * console.log(Person.SERIALIZER.toJson(jane));
+ * console.log(Person.serializer.toJson(jane));
  * // Output: ["Jane","Doe"]
  *
- * console.log(Person.SERIALIZER.toJson(jane, "readable"));
+ * console.log(Person.serializer.toJson(jane, "readable"));
  * // Output: {
  * //   "firstName": "Jane",
  * //   "lastName": "Doe"
@@ -338,8 +338,8 @@ export type JsonFlavor = "dense" | "readable";
  *
  * @example
  * let jane = Person.create({firstName: "Jane", lastName: "Doe"});
- * const json = Person.SERIALIZER.toJson(jane);
- * jane = Person.SERIALIZER.fromJson(json);
+ * const json = Person.serializer.toJson(jane);
+ * jane = Person.serializer.fromJson(json);
  * expect(jane.firstName).toBe("Jane");
  */
 export interface Serializer<T> {
@@ -404,7 +404,7 @@ export interface Serializer<T> {
 export function primitiveSerializer<P extends keyof PrimitiveTypes>(
   primitiveType: P,
 ): Serializer<PrimitiveTypes[P]> {
-  return PRIMITIVE_SERIALIZERS[primitiveType];
+  return primitiveSerializers[primitiveType];
 }
 
 /**
@@ -412,7 +412,7 @@ export function primitiveSerializer<P extends keyof PrimitiveTypes>(
  *
  * @example
  * expect(
- *   arraySerializer(User.SERIALIZER).toJsonCode([JANE, JOE])
+ *   arraySerializer(User.serializer).toJsonCode([JANE, JOE])
  * ).toBe(
  *   '[["jane"],["joe"]]'
  * );
@@ -475,11 +475,11 @@ interface TypeDescriptorBase {
    * Converts from one serialized form to another.
    *
    * @example
-   * const denseJson = User.SERIALIZER.toJson(user, "dense");
+   * const denseJson = User.serializer.toJson(user, "dense");
    * expect(
-   *   User.SERIALIZER.typeDescriptor.transform(denseJson, "readable")
+   *   User.serializer.typeDescriptor.transform(denseJson, "readable")
    * ).toMatch(
-   *   User.SERIALIZER.toJson(user, "readable")
+   *   User.serializer.toJson(user, "readable")
    * );
    */
   transform(json_or_bytes: Json | ArrayBuffer, out: JsonFlavor): Json;
@@ -605,11 +605,11 @@ export interface StructField<Struct = unknown, Value = unknown> {
  *
  * @example <caption>The field is kown at compile-time</caption>
  * const fieldNumber: number =
- *   User.SERIALIZER.typeDescriptor.getField("userId").number;
+ *   User.serializer.typeDescriptor.getField("userId").number;
  *
  * @example <caption>The field is not kown at compile-time</caption>
  * const fieldNumber: number | undefined =
- *   User.SERIALIZER.typeDescriptor.getField(variable)?.number;
+ *   User.serializer.typeDescriptor.getField(variable)?.number;
  */
 export type StructFieldResult<Struct, Key extends string | number> =
   | StructField<Struct>
@@ -716,11 +716,11 @@ export interface EnumWrapperField<Enum = unknown, Value = unknown> {
  *
  * @example <caption>The field is known at compile-time</caption>
  * const fieldNumber: number =
- *   Weekday.SERIALIZER.typeDescriptor.getField("MONDAY").number;
+ *   Weekday.serializer.typeDescriptor.getField("MONDAY").number;
  *
  * @example <caption>The field is not known at compile-time</caption>
  * const fieldNumber: number | undefined =
- *   Weekday.SERIALIZER.typeDescriptor.getField(variable)?.number;
+ *   Weekday.serializer.typeDescriptor.getField(variable)?.number;
  */
 export type EnumFieldResult<Enum, Key extends string | number> =
   | EnumField<Enum>
@@ -1316,7 +1316,7 @@ class Int32Serializer extends AbstractPrimitiveSerializer<"int32"> {
   }
 }
 
-const INT32_SERIALIZER = new Int32Serializer();
+const int32_Serializer = new Int32Serializer();
 
 abstract class FloatSerializer<
   P extends "float32" | "float64",
@@ -1417,7 +1417,7 @@ class Int64Serializer extends AbstractBigIntSerializer<"int64"> {
   encode(input: bigint, stream: OutputStream): void {
     if (input) {
       if (-2147483648 <= input && input <= 2147483647) {
-        INT32_SERIALIZER.encode(Number(input), stream);
+        int32_Serializer.encode(Number(input), stream);
       } else {
         stream.writeUint8(238);
         // Clamp the number if it's out of bounds.
@@ -1813,11 +1813,11 @@ class OptionalSerializerImpl<Other>
   }
 }
 
-const PRIMITIVE_SERIALIZERS: {
+const primitiveSerializers: {
   [P in keyof PrimitiveTypes]: Serializer<PrimitiveTypes[P]>;
 } = {
   bool: new BoolSerializer(),
-  int32: INT32_SERIALIZER,
+  int32: int32_Serializer,
   int64: new Int64Serializer(),
   uint64: new Uint64Serializer(),
   float32: new Float32Serializer(),
@@ -2603,7 +2603,7 @@ const PRIVATE_KEY: unique symbol = Symbol();
 
 function forPrivateUseError(t: unknown): Error {
   const clazz = Object.getPrototypeOf(t).constructor as AnyRecord;
-  const { qualifiedName } = clazz.SERIALIZER as StructDescriptor;
+  const { qualifiedName } = clazz.serializer as StructDescriptor;
   return Error(
     [
       "Do not call the constructor directly; ",
@@ -2667,7 +2667,7 @@ Object.defineProperty(_EnumBase.prototype, "union", {
 
 function toStringImpl<T>(value: T): string {
   const serializer = Object.getPrototypeOf(value).constructor
-    .SERIALIZER as InternalSerializer<T>;
+    .serializer as InternalSerializer<T>;
   return serializer.toJsonCode(value, "readable");
 }
 
@@ -3055,7 +3055,7 @@ export function _initModuleClasses(
 ): void {
   const privateKey = PRIVATE_KEY;
 
-  // First loop: add a SERIALIZER property to every record class.
+  // First loop: add a serializer property to every record class.
   for (const record of records) {
     const clazz = record.ctor as unknown as AnyRecord;
     switch (record.kind) {
@@ -3086,8 +3086,8 @@ export function _initModuleClasses(
           return Object.freeze(ret);
         };
         clazz.create = createFn;
-        // Create the SERIALIZER. It will be initialized in a second loop.
-        clazz.SERIALIZER = new StructSerializerImpl(
+        // Create the serializer. It will be initialized in a second loop.
+        clazz.serializer = new StructSerializerImpl(
           clazz.DEFAULT,
           createFn as (initializer: AnyRecord) => unknown,
           () => new mutableCtor() as Freezable<unknown>,
@@ -3109,8 +3109,8 @@ export function _initModuleClasses(
         // Define the 'create' static factory function.
         const createFn = makeCreateEnumFunction(record);
         clazz.create = createFn;
-        // Create the SERIALIZER. It will be initialized in a second loop.
-        clazz.SERIALIZER = new EnumSerializerImpl(createFn);
+        // Create the serializer. It will be initialized in a second loop.
+        clazz.serializer = new EnumSerializerImpl(createFn);
         break;
       }
     }
@@ -3127,10 +3127,10 @@ export function _initModuleClasses(
   for (const record of records) {
     const clazz = record.ctor as unknown as AnyRecord;
     const parentTypeDescriptor = (record.parentCtor as unknown as AnyRecord)
-      ?.SERIALIZER as StructDescriptor | EnumDescriptor | undefined;
+      ?.serializer as StructDescriptor | EnumDescriptor | undefined;
     switch (record.kind) {
       case "struct": {
-        // Initializer SERIALIZER.
+        // Initializer serializer.
         const fields = record.fields.map(
           (f) =>
             new StructFieldImpl(
@@ -3140,7 +3140,7 @@ export function _initModuleClasses(
               getSerializerForType(f.type) as InternalSerializer,
             ),
         );
-        const serializer = clazz.SERIALIZER as StructSerializerImpl;
+        const serializer = clazz.serializer as StructSerializerImpl;
         serializer.init(
           record.name,
           modulePath,
@@ -3176,7 +3176,7 @@ export function _initModuleClasses(
         break;
       }
       case "enum": {
-        const serializer = clazz.SERIALIZER as EnumSerializerImpl;
+        const serializer = clazz.serializer as EnumSerializerImpl;
         const fields = record.fields.map((f) =>
           f.type
             ? new EnumWrapperFieldImpl(
@@ -3208,13 +3208,7 @@ export function _initModuleClasses(
 }
 
 function enumConstantNameToProperty(name: string): string {
-  switch (name) {
-    case "?":
-      return "UNKNOWN";
-    case "SERIALIZER":
-      return "SERIALIZER_";
-  }
-  return name;
+  return name === "?" ? "UNKNOWN" : name;
 }
 
 function makeCreateEnumFunction(
@@ -3271,7 +3265,7 @@ function makeMutableClassForRecord(
     }
 
     toString(): string {
-      const serializer = frozenClass.SERIALIZER as Serializer<unknown>;
+      const serializer = frozenClass.serializer as Serializer<unknown>;
       return serializer.toJsonCode(this, "readable");
     }
   }
@@ -3288,7 +3282,7 @@ function getSerializerForType(type: TypeSpec): Serializer<unknown> {
       return primitiveSerializer(type.primitive);
     case "record":
       return (type.ctor as unknown as AnyRecord)
-        .SERIALIZER as Serializer<unknown>;
+        .serializer as Serializer<unknown>;
   }
 }
 
