@@ -1,5 +1,6 @@
 import type {
   Express as ExpressApp,
+  json as ExpressJson,
   Request as ExpressRequest,
   Response as ExpressResponse,
   text as ExpressText,
@@ -3021,6 +3022,7 @@ export function installServiceOnExpressApp(
   queryPath: string,
   service: Service<ExpressRequest, ExpressResponse>,
   text: typeof ExpressText,
+  json: typeof ExpressJson,
   keepUnrecognizedFields?: "keep-unrecognized-fields",
 ): void {
   const callback = async (
@@ -3033,7 +3035,12 @@ export function installServiceOnExpressApp(
       const queryString = req.originalUrl.substring(indexOfQuestionMark + 1);
       body = decodeURIComponent(queryString);
     } else {
-      body = typeof req.body === "string" ? req.body : "";
+      body =
+        typeof req.body === "string"
+          ? req.body
+          : typeof req.body === "object"
+            ? JSON.stringify(req.body)
+            : "";
     }
     const rawResponse = await service.handleRequest(
       body,
@@ -3047,7 +3054,7 @@ export function installServiceOnExpressApp(
       .send(rawResponse.data);
   };
   app.get(queryPath, callback);
-  app.post(queryPath, text(), callback);
+  app.post(queryPath, text(), json(), callback);
 }
 
 // =============================================================================
