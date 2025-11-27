@@ -84,7 +84,7 @@ export class Timestamp {
   /**
    * Earliest moment in time representable as a `Timestamp`, namely April 20,
    * 271821 BC.
-
+   *
    * @see https://262.ecma-international.org/5.1/#sec-15.9.1.1
    */
   static readonly MIN = new Timestamp(-8640000000000000);
@@ -92,7 +92,7 @@ export class Timestamp {
   /**
    * Latest moment in time representable as a `Timestamp`, namely September 13,
    * 275760 AD.
-
+   * 
    * @see https://262.ecma-international.org/5.1/#sec-15.9.1.1
    */
   static readonly MAX = new Timestamp(8640000000000000);
@@ -2858,29 +2858,100 @@ export class Service<
       };
       const jsonCode = JSON.stringify(json, undefined, "  ");
       return new RawResponse(jsonCode, "ok-json");
-    } else if (reqBody === "restudio") {
+    } else if (reqBody === "debug" || reqBody === "restudio") {
       return new RawResponse(RESTUDIO_HTML, "ok-html");
     }
 
-    const match = reqBody.match(/^([^:]*):([^:]*):([^:]*):([\S\s]*)$/);
-    if (!match) {
-      return new RawResponse(
-        "bad request: invalid request format",
-        "bad-request",
-      );
-    }
-    const methodName = match[1]!;
-    const methodNumberStr = match[2]!;
-    const format = match[3]!;
-    const requestData = match[4]!;
+    // Parse request
+    let methodName: string;
+    let methodNumber: number | undefined;
+    let format: string;
+    let requestData: ["json", Json] |  ["json-code", string]
 
-    if (!/-?[0-9]+/.test(methodNumberStr)) {
-      return new RawResponse(
-        "bad request: can't parse method number",
-        "bad-request",
-      );
+    const firstChar = reqBody.charAt(0);
+    if (/\s/.test(firstChar) || firstChar === "{") {
+      // A JSON object
+      let reqBodyJson: Json;
+      try {
+        reqBodyJson = JSON.parse(reqBody);
+      } catch (e) {
+        return new RawResponse("bad request: invalid JSON", "bad-request");
+      }
+      const methodField = (reqBodyJson as AnyRecord)["method"];
+      if (methodField === undefined) {
+        return new RawResponse(
+          "bad request: missing 'method' field in JSON",
+          "bad-request",
+        );
+      }
+      if (typeof methodField === "string") {
+        methodName = methodField;
+        methodNumber = undefined;
+      } else if (typeof methodField === "number") {
+        methodName = "?";
+        methodNumber = methodField;
+      } else {
+        return new RawResponse(
+          "bad request: 'method' field must be a string or a number",
+          "bad-request",
+        );
+      }
+      format = "readable";
+      const requestField = (reqBodyJson as AnyRecord)["request"];
+      if (requestField === undefined) {
+        return new RawResponse(
+          "bad request: missing 'request' field in JSON",
+          "bad-request",
+        );
+      }
+      requestData = ["json", requestField as Json]
+    } else {
+      // A colon-separated string
+      const match = reqBody.match(/^([^:]*):([^:]*):([^:]*):([\S\s]*)$/);
+      if (!match) {
+        return new RawResponse(
+          "bad request: invalid request format",
+          "bad-request",
+        );
+      }
+      methodName = match[1]!;
+      const methodNumberStr = match[2]!;
+      format = match[3]!;
+      requestData = ["json-code", match[4]!];
+
+      if (methodNumberStr) {
+        if (!/^-?[0-9]+$/.test(methodNumberStr)) {
+          return new RawResponse(
+            "bad request: can't parse method number",
+            "bad-request",
+          );
+        }
+        methodNumber = parseInt(methodNumberStr);
+      } else {
+        methodNumber = undefined;
+      }
     }
-    const methodNumber = parseInt(methodNumberStr);
+
+    // Look up method by number or name
+    if (methodNumber === undefined) {
+      // Try to get the method number by name
+      const allMethods = Object.values(this.methodImpls);
+      const nameMatches = allMethods.filter(
+        (m) => m.method.name === methodName,
+      );
+      if (nameMatches.length === 0) {
+        return new RawResponse(
+          `bad request: method not found: ${methodName}`,
+          "bad-request",
+        );
+      } else if (nameMatches.length > 1) {
+        return new RawResponse(
+          `bad request: method name '${methodName}' is ambiguous; use method number instead`,
+          "bad-request",
+        );
+      }
+      methodNumber = nameMatches[0]!.method.number;
+    }
 
     const methodImpl = this.methodImpls[methodNumber];
     if (!methodImpl) {
@@ -2892,10 +2963,17 @@ export class Service<
 
     let req: unknown;
     try {
-      req = methodImpl.method.requestSerializer.fromJsonCode(
-        requestData,
-        keepUnrecognizedFields,
-      );
+      if (requestData[0] == "json") {
+        req = methodImpl.method.requestSerializer.fromJson(
+          requestData[1],
+          keepUnrecognizedFields,
+        );
+      } else {
+        req = methodImpl.method.requestSerializer.fromJsonCode(
+          requestData[1],
+          keepUnrecognizedFields,
+        );
+      }
     } catch (e) {
       return new RawResponse(
         `bad request: can't parse JSON: ${e}`,
