@@ -92,7 +92,7 @@ export class Timestamp {
   /**
    * Latest moment in time representable as a `Timestamp`, namely September 13,
    * 275760 AD.
-   * 
+   *
    * @see https://262.ecma-international.org/5.1/#sec-15.9.1.1
    */
   static readonly MAX = new Timestamp(8640000000000000);
@@ -2866,7 +2866,7 @@ export class Service<
     let methodName: string;
     let methodNumber: number | undefined;
     let format: string;
-    let requestData: ["json", Json] |  ["json-code", string]
+    let requestData: ["json", Json] | ["json-code", string];
 
     const firstChar = reqBody.charAt(0);
     if (/\s/.test(firstChar) || firstChar === "{") {
@@ -2904,7 +2904,7 @@ export class Service<
           "bad-request",
         );
       }
-      requestData = ["json", requestField as Json]
+      requestData = ["json", requestField as Json];
     } else {
       // A colon-separated string
       const match = reqBody.match(/^([^:]*):([^:]*):([^:]*):([\S\s]*)$/);
