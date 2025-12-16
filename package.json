@@ -1,26 +1,26 @@
 {
-  "name": "soia",
-  "version": "1.2.2",
+  "name": "skir-client",
+  "version": "0.0.1",
   "description": "",
-  "homepage": "https://github.com/gepheum/soia-typescript-client#readme",
+  "homepage": "https://github.com/gepheum/skir-typescript-client#readme",
   "bugs": {
-    "url": "https://github.com/gepheum/soia-typescript-client/issues"
+    "url": "https://github.com/gepheum/skir-typescript-client/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/gepheum/soia-typescript-client.git"
+    "url": "git+https://github.com/gepheum/skir-typescript-client.git"
   },
   "license": "ISC",
   "author": "Tyler Fibonacci <gepheum@gmail.com>",
   "type": "module",
   "exports": {
     ".": {
-      "import": "./dist/esm/soia.js",
-      "require": "./dist/cjs/soia.js"
+      "import": "./dist/esm/skir-client.js",
+      "require": "./dist/cjs/skir-client.js"
     }
   },
-  "main": "./dist/cjs/soia.js",
-  "module": "./dist/esm/soia.js",
+  "main": "./dist/cjs/skir-client.js",
+  "module": "./dist/esm/skir-client.js",
   "files": [
     "dist/cjs",
     "dist/esm",
@@ -49,6 +49,7 @@
     "prettier": "^3.2.4",
     "prettier-plugin-organize-imports": "^4.2.0",
     "ts-node": "^10.9.1",
+    "tsx": "^4.21.0",
     "typescript": "^5.2.2"
   },
   "dependencies": {

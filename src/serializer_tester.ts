@@ -7,7 +7,7 @@ import {
   type MutableForm,
   type Serializer,
   type TypeDescriptor,
-} from "./soia.js";
+} from "./skir-client.js";
 
 export class SerializerTester<T> {
   constructor(readonly serializer: Serializer<T>) {}
@@ -57,7 +57,7 @@ export class SerializerTester<T> {
             serializer.fromJson(actualJson);
             const reserialized: T = serializer.fromJson(
               actualJson,
-              "keep-unrecognized-fields",
+              "keep-unrecognized-values",
             );
             expect(serializer.toJson(reserialized, flavor)).toMatch(
               expectedJson,
@@ -67,7 +67,7 @@ export class SerializerTester<T> {
           it("#toJsonCode() -> #fromJsonCode() -> #toJson()", () => {
             const reserialized = serializer.fromJsonCode(
               serializer.toJsonCode(input, flavor),
-              "keep-unrecognized-fields",
+              "keep-unrecognized-values",
             );
             expect(serializer.toJson(reserialized, flavor)).toMatch(
               expectedJson,
@@ -85,7 +85,7 @@ export class SerializerTester<T> {
       serializer.fromBytes(actualBytes);
       const reserialized = serializer.fromBytes(
         actualBytes,
-        "keep-unrecognized-fields",
+        "keep-unrecognized-values",
       );
       it("#toBytes() -> #fromBytes() -> #toBytes()", () => {
         const actualBase16 = toBase16(
@@ -145,7 +145,7 @@ export class SerializerTester<T> {
       serializer.fromJson(serializer.toJson(input));
       return serializer.fromJson(
         serializer.toJson(input),
-        "keep-unrecognized-fields",
+        "keep-unrecognized-values",
       );
     });
   }
@@ -159,7 +159,7 @@ export class SerializerTester<T> {
       });
       it("from bytes", () => {
         const bytes = new ArrayBuffer(5);
-        new TextEncoder().encodeInto("soia", new Uint8Array(bytes, 0, 4));
+        new TextEncoder().encodeInto("skir", new Uint8Array(bytes, 0, 4));
         expect(isDefaultFn(serializer.fromBytes(bytes))).toBe(true);
       });
     });
@@ -177,7 +177,7 @@ export class SerializerTester<T> {
 
 export function toBase16(buffer: ArrayBuffer): string {
   const prefix = new TextDecoder().decode(new Uint8Array(buffer).slice(0, 4));
-  expect(prefix).toBe("soia");
+  expect(prefix).toBe("skir");
   return [...new Uint8Array(buffer)]
     .slice(4)
     .map((x) => x.toString(16).padStart(2, "0"))

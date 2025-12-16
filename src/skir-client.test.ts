@@ -1,64 +1,64 @@
 import { expect } from "buckwheat";
 import { describe, it } from "mocha";
 import { SerializerTester } from "./serializer_tester.js";
-import * as soia from "./soia.js";
+import * as skir from "./skir-client.js";
 
 describe("Timestamp", () => {
   it("#MIN is min timestamp rerpresentable as Date objects", () => {
-    expect(new Date(soia.Timestamp.MIN.unixMillis).getTime()).toBe(
+    expect(new Date(skir.Timestamp.MIN.unixMillis).getTime()).toBe(
       -8640000000000000,
     );
-    expect(new Date(soia.Timestamp.MIN.unixMillis - 1).getTime()).toBe(
+    expect(new Date(skir.Timestamp.MIN.unixMillis - 1).getTime()).toBe(
       Number.NaN,
     );
   });
 
   it("#MAX is max timestamp rerpresentable as Date objects", () => {
-    expect(new Date(soia.Timestamp.MAX.unixMillis).getTime()).toBe(
+    expect(new Date(skir.Timestamp.MAX.unixMillis).getTime()).toBe(
       8640000000000000,
     );
-    expect(new Date(soia.Timestamp.MAX.unixMillis + 1).getTime()).toBe(
+    expect(new Date(skir.Timestamp.MAX.unixMillis + 1).getTime()).toBe(
       Number.NaN,
     );
   });
 
   describe("#fromUnixMillis()", () => {
     it("works", () => {
-      expect(soia.Timestamp.fromUnixMillis(3000).unixMillis).toBe(3000);
-      expect(soia.Timestamp.fromUnixMillis(3001).unixSeconds).toBe(3.001);
+      expect(skir.Timestamp.fromUnixMillis(3000).unixMillis).toBe(3000);
+      expect(skir.Timestamp.fromUnixMillis(3001).unixSeconds).toBe(3.001);
     });
     it("clamp timestamps outside of valid range", () => {
       expect(
-        soia.Timestamp.fromUnixMillis(soia.Timestamp.MAX.unixMillis + 1)
+        skir.Timestamp.fromUnixMillis(skir.Timestamp.MAX.unixMillis + 1)
           .unixMillis,
-      ).toBe(soia.Timestamp.MAX.unixMillis);
+      ).toBe(skir.Timestamp.MAX.unixMillis);
     });
     it("truncates to millisecond precision", () => {
-      expect(soia.Timestamp.fromUnixMillis(2.8).unixMillis).toBe(3);
+      expect(skir.Timestamp.fromUnixMillis(2.8).unixMillis).toBe(3);
     });
   });
 
   describe("#fromUnixSeconds()", () => {
     it("works", () => {
-      expect(soia.Timestamp.fromUnixSeconds(3).unixMillis).toBe(3000);
-      expect(soia.Timestamp.fromUnixSeconds(3).unixSeconds).toBe(3);
+      expect(skir.Timestamp.fromUnixSeconds(3).unixMillis).toBe(3000);
+      expect(skir.Timestamp.fromUnixSeconds(3).unixSeconds).toBe(3);
     });
     it("truncates to millisecond precision", () => {
-      expect(soia.Timestamp.fromUnixSeconds(2.0061).unixSeconds).toBe(2.006);
+      expect(skir.Timestamp.fromUnixSeconds(2.0061).unixSeconds).toBe(2.006);
     });
   });
 
   describe("#toDate()", () => {
     it("works", () => {
       expect(
-        soia.Timestamp.fromUnixMillis(1694467279837).toDate().getTime(),
+        skir.Timestamp.fromUnixMillis(1694467279837).toDate().getTime(),
       ).toBe(1694467279837);
     });
   });
 
   describe("#now()", () => {
     it("works", () => {
-      const now = soia.Timestamp.now();
+      const now = skir.Timestamp.now();
       expect(now.toDate().getFullYear()).toCompare(">=", 2023);
       expect(now.toDate().getFullYear()).toCompare(
         "<=",
@@ -69,22 +69,22 @@ describe("Timestamp", () => {
 
   describe("#toString()", () => {
     it("works", () => {
-      const timestamp = soia.Timestamp.fromUnixMillis(1694467279837);
+      const timestamp = skir.Timestamp.fromUnixMillis(1694467279837);
       expect(timestamp.toString()).toBe("2023-09-11T21:21:19.837Z");
     });
   });
 
   describe("#parse()", () => {
     it("works", () => {
-      const timestamp = soia.Timestamp.fromUnixMillis(1694467279837);
-      const parseResult = soia.Timestamp.parse(timestamp.toString());
+      const timestamp = skir.Timestamp.fromUnixMillis(1694467279837);
+      const parseResult = skir.Timestamp.parse(timestamp.toString());
       expect(parseResult.unixMillis).toBe(timestamp.unixMillis);
     });
   });
 });
 
 describe("timestamp serializer", () => {
-  const serializer = soia.primitiveSerializer("timestamp");
+  const serializer = skir.primitiveSerializer("timestamp");
   const tester = new SerializerTester(serializer);
 
   it("#typeDescriptor", () => {
@@ -118,7 +118,7 @@ describe("timestamp serializer", () => {
       ].join("\n"),
     );
     expect(
-      soia
+      skir
         .parseTypeDescriptorFromJsonCode(serializer.typeDescriptor.asJsonCode())
         .asJson(),
     ).toMatch(serializer.typeDescriptor.asJson());
@@ -129,7 +129,7 @@ describe("timestamp serializer", () => {
   });
 
   tester.reserializeAndAssert(
-    soia.Timestamp.UNIX_EPOCH,
+    skir.Timestamp.UNIX_EPOCH,
     {
       denseJson: 0,
       readableJson: {
@@ -142,7 +142,7 @@ describe("timestamp serializer", () => {
   );
 
   tester.reserializeAndAssert(
-    soia.Timestamp.fromUnixMillis(1692999034586),
+    skir.Timestamp.fromUnixMillis(1692999034586),
     {
       denseJson: 1692999034586,
       readableJson: {
@@ -155,7 +155,7 @@ describe("timestamp serializer", () => {
   );
 
   tester.reserializeAndAssert(
-    soia.Timestamp.fromUnixMillis(-1692999034586),
+    skir.Timestamp.fromUnixMillis(-1692999034586),
     {
       denseJson: -1692999034586,
       readableJson: {
@@ -168,7 +168,7 @@ describe("timestamp serializer", () => {
   );
 
   it("default JSON flavor is dense", () => {
-    expect(serializer.toJson(soia.Timestamp.UNIX_EPOCH)).toBe(0);
+    expect(serializer.toJson(skir.Timestamp.UNIX_EPOCH)).toBe(0);
   });
 });
 
@@ -181,44 +181,44 @@ describe("ByteString", () => {
     return new Uint8Array(array);
   };
 
-  const makeTestByteString = (length = 4, start = 0): soia.ByteString => {
-    return soia.ByteString.sliceOf(makeTestByteArray(length, start).buffer);
+  const makeTestByteString = (length = 4, start = 0): skir.ByteString => {
+    return skir.ByteString.sliceOf(makeTestByteArray(length, start).buffer);
   };
 
-  const makeSlicedTestByteString = (length = 4): soia.ByteString => {
+  const makeSlicedTestByteString = (length = 4): skir.ByteString => {
     const superByteString = makeTestByteString(length + 2, -1);
-    return soia.ByteString.sliceOf(superByteString, 1, length + 1);
+    return skir.ByteString.sliceOf(superByteString, 1, length + 1);
   };
 
-  const toArray = (byteString: soia.ByteString): number[] => {
+  const toArray = (byteString: skir.ByteString): number[] => {
     return Array.from(new Uint8Array(byteString.toBuffer()));
   };
 
   describe("#EMPTY", () => {
     it("works", () => {
-      expect(soia.ByteString.EMPTY.byteLength).toBe(0);
-      expect(soia.ByteString.EMPTY.toBuffer().byteLength).toBe(0);
+      expect(skir.ByteString.EMPTY.byteLength).toBe(0);
+      expect(skir.ByteString.EMPTY.toBuffer().byteLength).toBe(0);
     });
   });
 
   describe("#sliceOf", () => {
     it("works when no start/end is specified", () => {
       let byteString = makeTestByteString();
-      byteString = soia.ByteString.sliceOf(byteString);
+      byteString = skir.ByteString.sliceOf(byteString);
       expect(byteString.byteLength).toBe(4);
       expect(toArray(byteString)).toMatch([0, 1, 2, 3]);
     });
 
     it("works when only start is specified", () => {
       let byteString = makeTestByteString();
-      byteString = soia.ByteString.sliceOf(byteString, 1);
+      byteString = skir.ByteString.sliceOf(byteString, 1);
       expect(byteString.byteLength).toBe(3);
       expect(toArray(byteString)).toMatch([1, 2, 3]);
     });
 
     it("works when both start/end are specified", () => {
       let byteString = makeTestByteString();
-      byteString = soia.ByteString.sliceOf(byteString, 1, 3);
+      byteString = skir.ByteString.sliceOf(byteString, 1, 3);
       expect(byteString.byteLength).toBe(2);
       expect(toArray(byteString)).toMatch([1, 2]);
     });
@@ -231,36 +231,36 @@ describe("ByteString", () => {
 
     it("returns empty when start === end", () => {
       const byteString = makeTestByteString();
-      expect(soia.ByteString.sliceOf(byteString, 3, 3)).toBe(
-        soia.ByteString.EMPTY,
+      expect(skir.ByteString.sliceOf(byteString, 3, 3)).toBe(
+        skir.ByteString.EMPTY,
       );
     });
 
     it("returns empty when start > end", () => {
       const byteString = makeTestByteString();
-      expect(soia.ByteString.sliceOf(byteString, 3, 0)).toBe(
-        soia.ByteString.EMPTY,
+      expect(skir.ByteString.sliceOf(byteString, 3, 0)).toBe(
+        skir.ByteString.EMPTY,
       );
     });
 
     it("doesn't copy ByteString if it doesn't need to", () => {
       const byteString = makeTestByteString();
-      expect(soia.ByteString.sliceOf(byteString, 0, 4)).toBe(byteString);
+      expect(skir.ByteString.sliceOf(byteString, 0, 4)).toBe(byteString);
     });
 
     it("start can be < 0", () => {
       const byteString = makeTestByteString();
-      expect(soia.ByteString.sliceOf(byteString, -1, 4)).toBe(byteString);
+      expect(skir.ByteString.sliceOf(byteString, -1, 4)).toBe(byteString);
     });
 
     it("end can be > byteLength", () => {
       const byteString = makeTestByteString();
-      expect(soia.ByteString.sliceOf(byteString, 0, 5)).toBe(byteString);
+      expect(skir.ByteString.sliceOf(byteString, 0, 5)).toBe(byteString);
     });
 
     it("copies bytes in the ArrayBuffer", () => {
       const array = makeTestByteArray();
-      const byteString = soia.ByteString.sliceOf(array.buffer);
+      const byteString = skir.ByteString.sliceOf(array.buffer);
       array[3] = 4;
       expect(toArray(byteString)).toMatch([0, 1, 2, 3]);
     });
@@ -272,7 +272,7 @@ describe("ByteString", () => {
       view[1] = 20;
       view[2] = 30;
       view[3] = 40;
-      const byteString = soia.ByteString.sliceOf(sharedBuffer);
+      const byteString = skir.ByteString.sliceOf(sharedBuffer);
       expect(byteString.byteLength).toBe(4);
       expect(toArray(byteString)).toMatch([10, 20, 30, 40]);
     });
@@ -321,7 +321,7 @@ describe("ByteString", () => {
         it("#toBase64() works", () => {
           expect(base64).toBe("AAECAwQFBgcICQoLDA0ODxAREhM=");
         });
-        const fromBase64 = soia.ByteString.fromBase64(base64);
+        const fromBase64 = skir.ByteString.fromBase64(base64);
         it("#fromBase64() works", () => {
           expect(toArray(fromBase64)).toMatch(toArray(byteString));
         });
@@ -334,11 +334,11 @@ describe("ByteString", () => {
           expect(base16).toBe("000102030405060708090a0b0c0d0e0f10111213");
         });
         it("#fromBase16() works", () => {
-          const fromBase64 = soia.ByteString.fromBase16(base16);
+          const fromBase64 = skir.ByteString.fromBase16(base16);
           expect(toArray(fromBase64)).toMatch(array);
         });
         it("#fromBase16() accepts uppercase", () => {
-          const fromBase64 = soia.ByteString.fromBase16(base16.toUpperCase());
+          const fromBase64 = skir.ByteString.fromBase16(base16.toUpperCase());
           expect(toArray(fromBase64)).toMatch(array);
         });
       });
@@ -347,7 +347,7 @@ describe("ByteString", () => {
 });
 
 describe("bool serializer", () => {
-  const serializer = soia.primitiveSerializer("bool");
+  const serializer = skir.primitiveSerializer("bool");
   const tester = new SerializerTester(serializer);
 
   it("#typeDescriptor", () => {
@@ -373,7 +373,7 @@ describe("bool serializer", () => {
     expect(serializer.fromJsonCode('"0"')).toBe(false);
     expect(
       serializer.fromBytes(
-        soia.primitiveSerializer("int32").toBytes(888888).toBuffer(),
+        skir.primitiveSerializer("int32").toBytes(888888).toBuffer(),
       ),
     ).toBe(true);
   });
@@ -392,7 +392,7 @@ describe("bool serializer", () => {
 });
 
 describe("int32 serializer", () => {
-  const serializer = soia.primitiveSerializer("int32");
+  const serializer = skir.primitiveSerializer("int32");
   const tester = new SerializerTester(serializer);
 
   it("#typeDescriptor", () => {
@@ -505,7 +505,7 @@ describe("int32 serializer", () => {
     expect(serializer.fromJson(-2147483649)).toBe(2147483647);
     expect(
       serializer.fromBytes(
-        soia
+        skir
           .primitiveSerializer("int64")
           .toBytes(BigInt(2147483648))
           .toBuffer(),
@@ -520,7 +520,7 @@ describe("int32 serializer", () => {
 });
 
 describe("int64 serializer", () => {
-  const serializer = soia.primitiveSerializer("int64");
+  const serializer = skir.primitiveSerializer("int64");
   const tester = new SerializerTester(serializer);
 
   it("#typeDescriptor", () => {
@@ -576,7 +576,7 @@ describe("int64 serializer", () => {
 });
 
 describe("uint64 serializer", () => {
-  const serializer = soia.primitiveSerializer("uint64");
+  const serializer = skir.primitiveSerializer("uint64");
   const tester = new SerializerTester(serializer);
 
   it("#typeDescriptor", () => {
@@ -636,7 +636,7 @@ describe("uint64 serializer", () => {
 });
 
 describe("float32 serializer", () => {
-  const serializer = soia.primitiveSerializer("float32");
+  const serializer = skir.primitiveSerializer("float32");
   const tester = new SerializerTester(serializer);
 
   it("#typeDescriptor", () => {
@@ -711,7 +711,7 @@ describe("float32 serializer", () => {
 });
 
 describe("float64 serializer", () => {
-  const serializer = soia.primitiveSerializer("float64");
+  const serializer = skir.primitiveSerializer("float64");
   const tester = new SerializerTester(serializer);
 
   it("#typeDescriptor", () => {
@@ -771,7 +771,7 @@ describe("float64 serializer", () => {
 });
 
 describe("string serializer", () => {
-  const serializer = soia.primitiveSerializer("string");
+  const serializer = skir.primitiveSerializer("string");
   const tester = new SerializerTester(serializer);
 
   it("#typeDescriptor", () => {
@@ -825,7 +825,7 @@ describe("string serializer", () => {
 });
 
 describe("bytes serializer", () => {
-  const serializer = soia.primitiveSerializer("bytes");
+  const serializer = skir.primitiveSerializer("bytes");
   const tester = new SerializerTester(serializer);
 
   it("#typeDescriptor", () => {
@@ -846,12 +846,12 @@ describe("bytes serializer", () => {
     tester.reserializeTypeAdapterAndAssertNoLoss();
   });
 
-  tester.reserializeAndAssert(soia.ByteString.fromBase64("abc123"), {
+  tester.reserializeAndAssert(skir.ByteString.fromBase64("abc123"), {
     denseJson: "abc12w==",
     readableJson: "hex:69b735db",
     bytesAsBase16: "f50469b735db",
   });
-  tester.reserializeAndAssert(soia.ByteString.EMPTY, {
+  tester.reserializeAndAssert(skir.ByteString.EMPTY, {
     denseJson: "",
     readableJson: "hex:",
     bytesAsBase16: "f4",
@@ -860,10 +860,10 @@ describe("bytes serializer", () => {
 });
 
 describe("optional serializer", () => {
-  const otherSerializer = soia.primitiveSerializer("int32");
-  const serializer = soia.optionalSerializer(otherSerializer);
+  const otherSerializer = skir.primitiveSerializer("int32");
+  const serializer = skir.optionalSerializer(otherSerializer);
   it("is idempotent", () => {
-    expect(soia.optionalSerializer(serializer)).toMatch(serializer);
+    expect(skir.optionalSerializer(serializer)).toMatch(serializer);
   });
 
   const tester = new SerializerTester(serializer);
@@ -901,8 +901,8 @@ describe("optional serializer", () => {
 });
 
 describe("array serializer", () => {
-  const itemSerializer = soia.primitiveSerializer("int32");
-  const serializer = soia.arraySerializer(itemSerializer, "foo.bar");
+  const itemSerializer = skir.primitiveSerializer("int32");
+  const serializer = skir.arraySerializer(itemSerializer, "foo.bar");
   const tester = new SerializerTester(serializer);
 
   it("#typeDescriptor", () => {
@@ -958,8 +958,8 @@ describe("array serializer", () => {
 });
 
 describe("string array serializer", () => {
-  const itemSerializer = soia.primitiveSerializer("string");
-  const serializer = soia.arraySerializer(itemSerializer);
+  const itemSerializer = skir.primitiveSerializer("string");
+  const serializer = skir.arraySerializer(itemSerializer);
   const tester = new SerializerTester(serializer);
 
   it("TypeDescript#asJson()", () => {
@@ -991,8 +991,8 @@ describe("string array serializer", () => {
 });
 
 describe("bytes array serializer", () => {
-  const itemSerializer = soia.primitiveSerializer("bytes");
-  const serializer = soia.arraySerializer(itemSerializer);
+  const itemSerializer = skir.primitiveSerializer("bytes");
+  const serializer = skir.arraySerializer(itemSerializer);
   const tester = new SerializerTester(serializer);
 
   tester.reserializeAndAssert([], {
@@ -1000,8 +1000,8 @@ describe("bytes array serializer", () => {
     bytesAsBase16: "f6",
   });
 
-  const a = soia.ByteString.fromBase64("bGlnaHQgdw==");
-  const b = soia.ByteString.fromBase64("bGlnaHQgd28=");
+  const a = skir.ByteString.fromBase64("bGlnaHQgdw==");
+  const b = skir.ByteString.fromBase64("bGlnaHQgd28=");
 
   tester.reserializeAndAssert([a, b], {
     denseJson: [a.toBase64(), b.toBase64()],

@@ -1,17 +1,17 @@
-[![npm](https://img.shields.io/npm/v/soia)](https://www.npmjs.com/package/soia)
-[![build](https://github.com/gepheum/soia-typescript-client/workflows/Build/badge.svg)](https://github.com/gepheum/soia-typescript-client/actions)
+[![npm](https://img.shields.io/npm/v/skir)](https://www.npmjs.com/package/skir)
+[![build](https://github.com/gepheum/skir-typescript-client/workflows/Build/badge.svg)](https://github.com/gepheum/skir-typescript-client/actions)
 
-# Soia TypeScript Client
+# Skir TypeScript Client
 
-Library imported from TypeScript code generated from soia files.
+Library imported from TypeScript code generated from skir files.
 
 Install with:
 ```shell
-npm i soia
+npm i skir
 ```
 
 See:
 
-*   [soia](https://github.com/gepheum/soia): home of the soia compiler
-*   [soia-typescript-gen](https://github.com/gepheum/soia-typescript-gen): soia to TypeScript code generator
-*   [soia-typescript-example](https://github.com/gepheum/soia-typescript-example): example showing how to use soia's TypeScript code generator in a project
+*   [skir](https://github.com/gepheum/skir): home of the skir compiler
+*   [skir-typescript-gen](https://github.com/gepheum/skir-typescript-gen): skir to TypeScript code generator
+*   [skir-typescript-example](https://github.com/gepheum/skir-typescript-example): example showing how to use skir's TypeScript code generator in a project

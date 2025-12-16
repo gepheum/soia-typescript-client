@@ -298,15 +298,15 @@ export interface BinaryForm {
  * compact representation than when using JSON objects, and this makes
  * serialization and deserialization a bit faster. Because field names are left
  * out of the JSON, it is a representation which allows persistence: you can
- * safely rename a field in a `.soia` file without breaking backwards
+ * safely rename a field in a `.skir` file without breaking backwards
  * compatibility.
  * One con of this representation is that it is harder to tell, just by looking
  * at the JSON, what field of the struct each value in the array corresponds to.
  *
  * When using the readable flavor, structs are converted to JSON objects. The
- * name of each field in the `.soia` file is used as-is in the JSON. This
+ * name of each field in the `.skir` file is used as-is in the JSON. This
  * results in a representation which is much more readable by humans, but also
- * not suited for persistence: when you rename a field in a `.soia` file, you
+ * not suited for persistence: when you rename a field in a `.skir` file, you
  * will no lonnger be able to deserialize old JSONs.
  *
  * @example
@@ -335,7 +335,7 @@ export type JsonFlavor = "dense" | "readable";
  * a `T` or a `T.Mutable`.
  *
  * Do NOT create your own `Serializer` implementation. Only use implementations
- * provided by Soia.
+ * provided by Skir.
  *
  * @example
  * let jane = Person.create({firstName: "Jane", lastName: "Doe"});
@@ -348,28 +348,28 @@ export interface Serializer<T> {
    * Converts back the given stringified JSON to `T`.
    * Works with both [flavors]{@link JsonFlavor} of JSON.
    *
-   * Pass in "keep-unrecognized-fields" if and only if the input JSON comes
+   * Pass in "keep-unrecognized-values" if and only if the input JSON comes
    * from a trusted program which might have been built from more recent
    * source files.
    */
-  fromJsonCode(code: string, keep?: "keep-unrecognized-fields"): T;
+  fromJsonCode(code: string, keep?: "keep-unrecognized-values"): T;
   /**
    * Converts back the given JSON to `T`.
    * Works with both [flavors]{@link JsonFlavor} of JSON.
    *
-   * Pass in "keep-unrecognized-fields" if and only if the input JSON comes
+   * Pass in "keep-unrecognized-values" if and only if the input JSON comes
    * from a trusted program which might have been built from more recent
    * source files.
    */
-  fromJson(json: Json, keep?: "keep-unrecognized-fields"): T;
+  fromJson(json: Json, keep?: "keep-unrecognized-values"): T;
   /**
    * Converts back the given binary form to `T`.
    *
-   * Pass in "keep-unrecognized-fields" if and only if the input JSON comes
+   * Pass in "keep-unrecognized-values" if and only if the input JSON comes
    * from a trusted program which might have been built from more recent
    * source files.
    */
-  fromBytes(bytes: ArrayBuffer, keep?: "keep-unrecognized-fields"): T;
+  fromBytes(bytes: ArrayBuffer, keep?: "keep-unrecognized-values"): T;
   /**
    * Converts the given `T` to JSON and returns the stringified JSON. Same as
    * calling `JSON.stringify()` on the result of `toJson()`.
@@ -393,7 +393,7 @@ export interface Serializer<T> {
 }
 
 /**
- * Returns a serializer of instances of the given Soia primitive type.
+ * Returns a serializer of instances of the given Skir primitive type.
  *
  * @example
  * expect(
@@ -441,7 +441,7 @@ export function optionalSerializer<T>(
 }
 
 /**
- * Describes the type `T`, where `T` is the TypeScript equivalent of a Soia
+ * Describes the type `T`, where `T` is the TypeScript equivalent of a Skir
  * type. Enables reflective programming.
  *
  * Every `TypeDescriptor` instance has a `kind` field which can take one of
@@ -491,14 +491,14 @@ interface TypeDescriptorBase {
   ): Json | ArrayBuffer;
 }
 
-/** Describes a primitive Soia type. */
+/** Describes a primitive Skir type. */
 export interface PrimitiveDescriptor extends TypeDescriptorBase {
   kind: "primitive";
   primitive: keyof PrimitiveTypes;
 }
 
 /**
- * An interface mapping a primitive Soia type to the corresponding TypeScript
+ * An interface mapping a primitive Skir type to the corresponding TypeScript
  * type.
  */
 export interface PrimitiveTypes {
@@ -514,7 +514,7 @@ export interface PrimitiveTypes {
 }
 
 /**
- * Describes an optional type. In a `.soia` file, an optional type is
+ * Describes an optional type. In a `.skir` file, an optional type is
  * represented with a question mark at the end of another type.
  */
 export interface OptionalDescriptor<T> extends TypeDescriptorBase {
@@ -534,12 +534,12 @@ export interface ArrayDescriptor<T> extends TypeDescriptorBase {
 }
 
 /**
- * Describes a Soia struct.
+ * Describes a Skir struct.
  * The type parameter `T` refers to the generated frozen class for the struct.
  */
 export interface StructDescriptor<T = unknown> extends TypeDescriptorBase {
   readonly kind: "struct";
-  /** Name of the struct as specified in the `.soia` file. */
+  /** Name of the struct as specified in the `.skir` file. */
   readonly name: string;
   /**
    * A string containing all the names in the hierarchic sequence above and
@@ -558,7 +558,7 @@ export interface StructDescriptor<T = unknown> extends TypeDescriptorBase {
    * Undefined if the struct is defined at the top-level of the module.
    */
   readonly parentType: StructDescriptor | EnumDescriptor | undefined;
-  /** The fields of the struct in the order they appear in the `.soia` file. */
+  /** The fields of the struct in the order they appear in the `.skir` file. */
   readonly fields: ReadonlyArray<StructField<T>>;
   /** The field numbers marked as removed. */
   readonly removedNumbers: ReadonlySet<number>;
@@ -581,9 +581,9 @@ export interface StructDescriptor<T = unknown> extends TypeDescriptorBase {
   newMutable(initializer?: T | MutableForm<T>): MutableForm<T>;
 }
 
-/** Field of a Soia struct. */
+/** Field of a Skir struct. */
 export interface StructField<Struct = unknown, Value = unknown> {
-  /** Field name as specified in the `.soia` file, e.g. "user_id". */
+  /** Field name as specified in the `.skir` file, e.g. "user_id". */
   readonly name: string;
   /** Name of the property in the generated class, e.g. "userId". */
   readonly property: string;
@@ -620,10 +620,10 @@ export type StructFieldResult<Struct, Key extends string | number> =
         : undefined
       : undefined);
 
-/** Describes a Soia enum. */
+/** Describes a Skir enum. */
 export interface EnumDescriptor<T = unknown> extends TypeDescriptorBase {
   readonly kind: "enum";
-  /** Name of the enum as specified in the `.soia` file. */
+  /** Name of the enum as specified in the `.skir` file. */
   readonly name: string;
   /**
    * A string containing all the names in the hierarchic sequence above and
@@ -643,88 +643,91 @@ export interface EnumDescriptor<T = unknown> extends TypeDescriptorBase {
    */
   readonly parentType: StructDescriptor | EnumDescriptor | undefined;
   /**
-   * Includes the UNKNOWN field, followed by the other fields in the order they
-   * appear in the `.soia` file.
+   * Includes the UNKNOWN variant, followed by the other variants in the order
+   * they appear in the `.skir` file.
    */
-  readonly fields: ReadonlyArray<EnumField<T>>;
-  /** The field numbers marked as removed. */
+  readonly variants: ReadonlyArray<EnumVariant<T>>;
+  /** The variant numbers marked as removed. */
   readonly removedNumbers: ReadonlySet<number>;
 
   /**
-   * Looks up a field. The key can be one of the field name or the field number.
+   * Looks up a variant. The key can be one of the variant name or the variant
+   * number.
    *
-   * The return type is `EnumField<T> | undefined` unless the key is known at
-   * compile-time to be a field name of the struct, in which case it is
-   * `EnumField<T>`.
+   * The return type is `EnumVariant<T> | undefined` unless the key is known at
+   * compile-time to be a variant name of the enum, in which case it is
+   * `EnumVariant<T>`.
    */
-  getField<K extends string | number>(key: K): EnumFieldResult<T, K>;
+  getVariant<K extends string | number>(key: K): EnumVariantResult<T, K>;
 }
 
 /**
- * Field of a Soia enum. Fields which don't hold any value are called constant
- * fields. Their name is always in UPPER_CASE. Fields which hold value of a
- * given type are called wrapper fields, and their name is always in lower_case.
+ * Variant of a Skir enum. Variants which don't hold any value are called
+ * constant variants. Their name is always in UPPER_CASE. Variants which hold
+ * value of a given type are called wrapper variants, and their name is always
+ * in lower_case.
  */
-export type EnumField<Enum = unknown> =
-  | EnumConstantField<Enum>
-  | EnumWrapperField<Enum, unknown>;
+export type EnumVariant<Enum = unknown> =
+  | EnumConstantVariant<Enum>
+  | EnumWrapperVariant<Enum, unknown>;
 
-/** Field of a Soia enum which does not hold any value. */
-export interface EnumConstantField<Enum = unknown> {
+/** Field of a Skir enum which does not hold any value. */
+export interface EnumConstantVariant<Enum = unknown> {
   /**
-   * Field name as specified in the `.soia` file, e.g. "MONDAY".
+   * Variant name as specified in the `.skir` file, e.g. "MONDAY".
    * Always in UPPER_CASE format.
    */
   readonly name: string;
-  /** Field number. */
+  /** Variant number. */
   readonly number: number;
   /** The instance of the generated class which corresponds to this field. */
   readonly constant: Enum;
-  /** Always undefined, unlike the `type` field of `EnumWrapperField`. */
+  /** Always undefined, unlike the `type` field of `EnumWrapperVariant`. */
   readonly type?: undefined;
 }
 
-/** Field of a Soia enum which holds a value of a given type. */
-export interface EnumWrapperField<Enum = unknown, Value = unknown> {
+/** Variant of a Skir enum which holds a value of a given type. */
+export interface EnumWrapperVariant<Enum = unknown, Value = unknown> {
   /**
-   * Field name as specified in the `.soia` file, e.g. "v4".
+   * Variant name as specified in the `.skir` file, e.g. "v4".
    * Always in lower_case format.
    */
   readonly name: string;
-  /** Field number. */
+  /** Variant number. */
   readonly number: number;
   /** Describes the type of the value held by the field. */
   readonly type: TypeDescriptor<Value>;
-  /** Always undefined, unlike the `type` field of `EnumConstantField`. */
+  /** Always undefined, unlike the `type` field of `EnumConstantVariant`. */
   readonly constant?: undefined;
 
   /**
    * Extracts the value held by the given enum instance if it matches this
-   * enum field. Returns undefined otherwise.
+   * enum variant. Returns undefined otherwise.
    */
   get(e: Enum): Value | unknown;
   /**
-   * Returns a new enum instance matching this enum field and holding the given
-   * value.
+   * Returns a new enum instance matching this enum variant and holding the
+   * given value.
    */
   wrap(value: Value): Enum;
 }
 
 /**
- * Return type of the `EnumDescriptor.getField` method. If the argument is known
- * at compile-time to be the name of field, resolves to `EnumField<Enum>`.
- * Otherwise, resolves to `EnumField<Struct> | undefined`.
+ * Return type of the `EnumDescriptor.getVariant` method. If the argument is
+ * known at compile-time to be the name of variant, resolves to
+ * `EnumVariant<Enum>`. Otherwise, resolves to
+ * `EnumVariant<Struct> | undefined`.
  *
- * @example <caption>The field is known at compile-time</caption>
- * const fieldNumber: number =
- *   Weekday.serializer.typeDescriptor.getField("MONDAY").number;
+ * @example <caption>The variant is known at compile-time</caption>
+ * const variantNumber: number =
+ *   Weekday.serializer.typeDescriptor.getVariant("MONDAY").number;
  *
- * @example <caption>The field is not known at compile-time</caption>
- * const fieldNumber: number | undefined =
- *   Weekday.serializer.typeDescriptor.getField(variable)?.number;
+ * @example <caption>The variant is not known at compile-time</caption>
+ * const variantNumber: number | undefined =
+ *   Weekday.serializer.typeDescriptor.getVariant(variable)?.number;
  */
-export type EnumFieldResult<Enum, Key extends string | number> =
-  | EnumField<Enum>
+export type EnumVariantResult<Enum, Key extends string | number> =
+  | EnumVariant<Enum>
   | (Enum extends _EnumBase
       ? Key extends Enum["kind"]
         ? never
@@ -736,11 +739,11 @@ export type EnumFieldResult<Enum, Key extends string | number> =
  * server side.
  */
 export interface Method<Request, Response> {
-  /** Name of the procedure as specified in the `.soia` file. */
+  /** Name of the procedure as specified in the `.skir` file. */
   name: string;
   /**
    * A number which uniquely identifies this procedure.
-   * When it is not specified in the `.soia` file, it is obtained by hashing the
+   * When it is not specified in the `.skir` file, it is obtained by hashing the
    * procedure name.
    */
   number: number;
@@ -748,6 +751,11 @@ export interface Method<Request, Response> {
   requestSerializer: Serializer<Request>;
   /** Serializer of response objects. */
   responseSerializer: Serializer<Response>;
+  /**
+   * Documentation for this procedure specified as doc comments in the `.skir`
+   * file.
+   */
+  doc: string;
 }
 
 /**
@@ -796,22 +804,46 @@ type TypeSignature =
     };
 
 /**
- * Definition of a record field in the JSON representation of a
+ * Definition of a struct field in the JSON representation of a
  * `TypeDescriptor`.
  */
 type FieldDefinition = {
   name: string;
-  type?: TypeSignature;
+  type: TypeSignature;
   number: number;
+  doc?: string;
 };
 
-/** Definition of a record in the JSON representation of a `TypeDescriptor`. */
-type RecordDefinition = {
-  kind: "struct" | "enum";
-  id: string;
-  fields: readonly FieldDefinition[];
-  removed_numbers?: ReadonlyArray<number>;
+/**
+ * Definition of an enum variant in the JSON representation of a
+ * `TypeDescriptor`.
+ */
+type VariantDefinition = {
+  name: string;
+  type?: TypeSignature;
+  number: number;
+  doc?: string;
 };
+
+/** Definition of a struct in the JSON representation of a `TypeDescriptor`. */
+type StructDefinition = {
+  kind: "struct";
+  id: string;
+  doc?: string;
+  fields: readonly FieldDefinition[];
+  removed_numbers?: readonly number[];
+};
+
+/** Definition of an enum in the JSON representation of a `TypeDescriptor`. */
+type EnumDefinition = {
+  kind: "enum";
+  id: string;
+  doc?: string;
+  variants: readonly VariantDefinition[];
+  removed_numbers?: readonly number[];
+};
+
+type RecordDefinition = StructDefinition | EnumDefinition;
 
 interface InternalSerializer<T = unknown> extends Serializer<T> {
   readonly defaultValue: T;
@@ -826,14 +858,14 @@ interface InternalSerializer<T = unknown> extends Serializer<T> {
 class InputStream {
   constructor(
     readonly buffer: ArrayBuffer,
-    keep?: "keep-unrecognized-fields",
+    keep?: "keep-unrecognized-values",
   ) {
     this.dataView = new DataView(buffer);
-    this.keepUnrecognizedFields = !!keep;
+    this.keepUnrecognizedValues = !!keep;
   }
 
   readonly dataView: DataView;
-  readonly keepUnrecognizedFields: boolean;
+  readonly keepUnrecognizedValues: boolean;
   offset = 0;
 
   readUint8(): number {
@@ -1030,13 +1062,13 @@ function encodeUint32(length: number, stream: OutputStream): void {
 }
 
 abstract class AbstractSerializer<T> implements InternalSerializer<T> {
-  fromJsonCode(code: string, keep?: "keep-unrecognized-fields"): T {
+  fromJsonCode(code: string, keep?: "keep-unrecognized-values"): T {
     return this.fromJson(JSON.parse(code), keep);
   }
 
-  fromBytes(bytes: ArrayBuffer, keep?: "keep-unrecognized-fields"): T {
+  fromBytes(bytes: ArrayBuffer, keep?: "keep-unrecognized-values"): T {
     const inputStream = new InputStream(bytes, keep);
-    inputStream.offset = 4; // Skip the "soia" header.
+    inputStream.offset = 4; // Skip the "skir" header.
     return this.decode(inputStream);
   }
 
@@ -1047,7 +1079,7 @@ abstract class AbstractSerializer<T> implements InternalSerializer<T> {
 
   toBytes(input: T): BinaryForm {
     const stream = new OutputStream();
-    stream.putUtf8String("soia");
+    stream.putUtf8String("skir");
     this.encode(input, stream);
     return stream.finalize();
   }
@@ -1062,7 +1094,7 @@ abstract class AbstractSerializer<T> implements InternalSerializer<T> {
   }
 
   abstract readonly defaultValue: T;
-  abstract fromJson(json: Json, keep?: "keep-unrecognized-fields"): T;
+  abstract fromJson(json: Json, keep?: "keep-unrecognized-values"): T;
   abstract toJson(input: T, flavor?: JsonFlavor): Json;
   abstract decode(stream: InputStream): T;
   abstract encode(input: T, stream: OutputStream): void;
@@ -1100,8 +1132,8 @@ abstract class AbstractSerializer<T> implements InternalSerializer<T> {
   }
 }
 
-// The UNKNOWN field is common to all enums.
-const UNKNOWN_FIELD_DEFINITION: FieldDefinition = {
+// The UNKNOWN variant is common to all enums.
+const UNKNOWN_VARIANT_DEFINITION: VariantDefinition = {
   name: "?",
   number: 0,
 };
@@ -1197,11 +1229,11 @@ export function parseTypeDescriptorFromJson(json: Json): TypeDescriptor {
       }
       case "enum": {
         const s = serializer as EnumSerializerImpl<Json>;
-        const fields = [UNKNOWN_FIELD_DEFINITION]
-          .concat(definition.fields)
+        const variants = [UNKNOWN_VARIANT_DEFINITION]
+          .concat(definition.variants)
           .map((f) =>
             f.type
-              ? new EnumWrapperFieldImpl<Json>(
+              ? new EnumWrapperVariantImpl<Json>(
                   f.name,
                   f.number,
                   parse(f.type),
@@ -1211,10 +1243,10 @@ export function parseTypeDescriptorFromJson(json: Json): TypeDescriptor {
                   name: f.name,
                   number: f.number,
                   constant: Object.freeze({ kind: f.name }),
-                } as EnumConstantField<Json>),
+                } as EnumConstantVariant<Json>),
           );
         initOps.push(() =>
-          s.init(name, module, parentType, fields, removed_numbers ?? []),
+          s.init(name, module, parentType, variants, removed_numbers ?? []),
         );
         break;
       }
@@ -1669,9 +1701,9 @@ class StructFieldImpl<Struct = unknown, Value = unknown>
   }
 }
 
-type EnumFieldImpl<Enum = unknown> =
-  | EnumConstantFieldImpl<Enum>
-  | EnumWrapperFieldImpl<Enum, unknown>;
+type EnumVariantImpl<Enum = unknown> =
+  | EnumConstantVariantImpl<Enum>
+  | EnumWrapperVariantImpl<Enum, unknown>;
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
@@ -1694,7 +1726,7 @@ class ArraySerializerImpl<Item>
     return input.map((e) => this.itemSerializer.toJson(e, flavor));
   }
 
-  fromJson(json: Json, keep?: "keep-unrecognized-fields"): ReadonlyArray<Item> {
+  fromJson(json: Json, keep?: "keep-unrecognized-values"): ReadonlyArray<Item> {
     if (json === 0) {
       return _EMPTY_ARRAY;
     }
@@ -1771,7 +1803,7 @@ class OptionalSerializerImpl<Other>
     return input !== null ? this.otherSerializer.toJson(input, flavor) : null;
   }
 
-  fromJson(json: Json, keep?: "keep-unrecognized-fields"): Other | null {
+  fromJson(json: Json, keep?: "keep-unrecognized-values"): Other | null {
     return json !== null ? this.otherSerializer.fromJson(json, keep) : null;
   }
 
@@ -1904,14 +1936,14 @@ abstract class AbstractRecordSerializer<T, F> extends AbstractSerializer<T> {
     name: string,
     modulePath: string,
     parentType: StructDescriptor | EnumDescriptor | undefined,
-    fields: readonly F[],
+    fieldsOrVariants: readonly F[],
     removedNumbers: readonly number[],
   ): void {
     this.name = name;
     this.modulePath = modulePath;
     this.parentType = parentType;
     this.removedNumbers = new Set(removedNumbers);
-    this.registerFields(fields);
+    this.registerFieldsOrVariants(fieldsOrVariants);
     this.initialized = true;
     freezeDeeply(this);
   }
@@ -1921,18 +1953,14 @@ abstract class AbstractRecordSerializer<T, F> extends AbstractSerializer<T> {
     return parentType ? `${parentType.name}.${name}` : name;
   }
 
-  abstract registerFields(fields: readonly F[]): void;
+  abstract registerFieldsOrVariants(fieldsOrVariants: readonly F[]): void;
 
   addRecordDefinitionsTo(out: { [k: string]: RecordDefinition }): void {
     const recordId = `${this.modulePath}:${this.qualifiedName}`;
     if (out[recordId]) {
       return;
     }
-    const recordDefinition: RecordDefinition = {
-      kind: this.kind,
-      id: recordId,
-      fields: this.fieldDefinitions(),
-    };
+    const recordDefinition = this.makeRecordDefinition(recordId);
     if (this.removedNumbers.size) {
       recordDefinition.removed_numbers = [...this.removedNumbers];
     }
@@ -1942,7 +1970,7 @@ abstract class AbstractRecordSerializer<T, F> extends AbstractSerializer<T> {
     }
   }
 
-  abstract fieldDefinitions(): FieldDefinition[];
+  abstract makeRecordDefinition(recordId: string): RecordDefinition;
   abstract dependencies(): InternalSerializer[];
 }
 
@@ -1973,7 +2001,7 @@ class StructSerializerImpl<T = unknown>
   }
 
   readonly kind = "struct";
-  // Fields in the order they appear in the `.soia` file.
+  // Fields in the order they appear in the `.skir` file.
   readonly fields: Array<StructFieldImpl<T>> = [];
   readonly fieldMapping: { [key: string | number]: StructFieldImpl<T> } = {};
   // Fields sorted by number in descending order.
@@ -2037,7 +2065,7 @@ class StructSerializerImpl<T = unknown>
     }
   }
 
-  fromJson(json: Json, keep?: "keep-unrecognized-fields"): T {
+  fromJson(json: Json, keep?: "keep-unrecognized-values"): T {
     if (!json) {
       return this.defaultValue;
     }
@@ -2153,7 +2181,7 @@ class StructSerializerImpl<T = unknown>
       for (let i = recognizedSlots; i < encodedSlots; ++i) {
         decodeUnused(stream);
       }
-      if (stream.keepUnrecognizedFields) {
+      if (stream.keepUnrecognizedValues) {
         const end = stream.offset;
         const unrecognizedBytes = ByteString.sliceOf(stream.buffer, start, end);
         const unrecognizedFields = new UnrecognizedFields(
@@ -2215,7 +2243,7 @@ class StructSerializerImpl<T = unknown>
     return this.newMutableFn(initializer);
   }
 
-  registerFields(fields: ReadonlyArray<StructFieldImpl<T>>): void {
+  registerFieldsOrVariants(fields: ReadonlyArray<StructFieldImpl<T>>): void {
     for (const field of fields) {
       const { name, number, property } = field;
       this.fields.push(field);
@@ -2234,12 +2262,16 @@ class StructSerializerImpl<T = unknown>
     this.reversedFields = [...this.fields].sort((a, b) => b.number - a.number);
   }
 
-  fieldDefinitions(): FieldDefinition[] {
-    return this.fields.map((f) => ({
-      name: f.name,
-      number: f.number,
-      type: f.serializer.typeSignature,
-    }));
+  makeRecordDefinition(recordId: string): StructDefinition {
+    return {
+      kind: "struct",
+      id: recordId,
+      fields: this.fields.map((f) => ({
+        name: f.name,
+        number: f.number,
+        type: f.serializer.typeSignature,
+      })),
+    };
   }
 
   dependencies(): InternalSerializer[] {
@@ -2257,11 +2289,11 @@ class UnrecognizedEnum {
   }
 }
 
-interface EnumConstantFieldImpl<Enum> extends EnumConstantField<Enum> {
+interface EnumConstantVariantImpl<Enum> extends EnumConstantVariant<Enum> {
   readonly serializer?: undefined;
 }
 
-class EnumWrapperFieldImpl<Enum, Value = unknown> {
+class EnumWrapperVariantImpl<Enum, Value = unknown> {
   constructor(
     readonly name: string,
     readonly number: number,
@@ -2287,7 +2319,7 @@ class EnumWrapperFieldImpl<Enum, Value = unknown> {
 }
 
 class EnumSerializerImpl<T = unknown>
-  extends AbstractRecordSerializer<T, EnumFieldImpl<T>>
+  extends AbstractRecordSerializer<T, EnumVariantImpl<T>>
   implements EnumDescriptor<T>
 {
   constructor(readonly createFn: (initializer: unknown) => T) {
@@ -2297,9 +2329,10 @@ class EnumSerializerImpl<T = unknown>
 
   readonly kind = "enum";
   readonly defaultValue: T;
-  readonly fields: EnumFieldImpl<T>[] = [];
-  private readonly fieldMapping: { [key: string | number]: EnumFieldImpl<T> } =
-    {};
+  readonly variants: EnumVariantImpl<T>[] = [];
+  private readonly variantMapping: {
+    [key: string | number]: EnumVariantImpl<T>;
+  } = {};
 
   toJson(input: T, flavor?: JsonFlavor): Json {
     const unrecognized = (input as AnyRecord)["^"] as
@@ -2310,75 +2343,75 @@ class EnumSerializerImpl<T = unknown>
       unrecognized.json &&
       unrecognized.token === this.token
     ) {
-      // Unrecognized field.
+      // Unrecognized variant.
       return unrecognized.json;
     }
     const kind = (input as AnyRecord).kind as string;
     if (kind === "?") {
       return flavor === "readable" ? "?" : 0;
     }
-    const field = this.fieldMapping[kind]!;
-    const serializer = field.serializer;
+    const variant = this.variantMapping[kind]!;
+    const { serializer } = variant;
     if (serializer) {
       const value = (input as AnyRecord).value;
       if (flavor === "readable") {
         return {
-          kind: field.name,
+          kind: variant.name,
           value: serializer.toJson(value, flavor),
         };
       } else {
         // Dense flavor.
-        return [field.number, serializer.toJson(value, flavor)];
+        return [variant.number, serializer.toJson(value, flavor)];
       }
     } else {
-      // A constant field.
-      return flavor === "readable" ? field.name : field.number;
+      // A constant variant.
+      return flavor === "readable" ? variant.name : variant.number;
     }
   }
 
-  fromJson(json: Json, keep?: "keep-unrecognized-fields"): T {
+  fromJson(json: Json, keep?: "keep-unrecognized-values"): T {
     const isNumber = typeof json === "number";
     if (isNumber || typeof json === "string") {
-      const field = this.fieldMapping[isNumber ? json : String(json)];
-      if (!field) {
-        // Check if the field was removed, in which case we want to return
+      const variant = this.variantMapping[isNumber ? json : String(json)];
+      if (!variant) {
+        // Check if the variant was removed, in which case we want to return
         // UNKNOWN, or is unrecognized.
         return !keep || (isNumber && this.removedNumbers.has(json))
           ? this.defaultValue
           : this.createFn(new UnrecognizedEnum(this.token, copyJson(json)));
       }
-      if (field.serializer) {
-        throw new Error(`refers to a wrapper field: ${json}`);
+      if (variant.serializer) {
+        throw new Error(`refers to a wrapper variant: ${json}`);
       }
-      return field.constant;
+      return variant.constant;
     }
-    let fieldKey: number | string;
+    let variantKey: number | string;
     let valueAsJson: Json;
     if (json instanceof Array) {
-      fieldKey = json[0] as number;
+      variantKey = json[0] as number;
       valueAsJson = json[1]!;
     } else if (json instanceof Object) {
-      fieldKey = json["kind"] as string;
+      variantKey = json["kind"] as string;
       valueAsJson = json["value"]!;
     } else {
       throw TypeError();
     }
-    const field = this.fieldMapping[fieldKey];
-    if (!field) {
-      // Check if the field was removed, in which case we want to return
+    const variant = this.variantMapping[variantKey];
+    if (!variant) {
+      // Check if the variant was removed, in which case we want to return
       // UNKNOWN, or is unrecognized.
       return !keep ||
-        (typeof fieldKey === "number" && this.removedNumbers.has(fieldKey))
+        (typeof variantKey === "number" && this.removedNumbers.has(variantKey))
         ? this.defaultValue
         : this.createFn(
             new UnrecognizedEnum(this.token, copyJson(json), undefined),
           );
     }
-    const { serializer } = field;
+    const { serializer } = variant;
     if (!serializer) {
-      throw new Error(`refers to a constant field: ${json}`);
+      throw new Error(`refers to a constant variant: ${json}`);
     }
-    return field.wrap(serializer.fromJson(valueAsJson, keep));
+    return variant.wrap(serializer.fromJson(valueAsJson, keep));
   }
 
   encode(input: T, stream: OutputStream): void {
@@ -2389,7 +2422,7 @@ class EnumSerializerImpl<T = unknown>
       unrecognized.bytes &&
       unrecognized.token === this.token
     ) {
-      // Unrecognized field.
+      // Unrecognized variant.
       stream.putBytes(unrecognized.bytes);
       return;
     }
@@ -2398,10 +2431,10 @@ class EnumSerializerImpl<T = unknown>
       stream.writeUint8(0);
       return;
     }
-    const field = this.fieldMapping[kind]!;
-    const { number, serializer } = field;
+    const variant = this.variantMapping[kind]!;
+    const { number, serializer } = variant;
     if (serializer) {
-      // A wrapper field.
+      // A wrapper variant.
       const value = (input as AnyRecord).value;
       if (number < 5) {
         // The number can't be 0 or else kind == "?".
@@ -2423,11 +2456,11 @@ class EnumSerializerImpl<T = unknown>
     if (wire < 242) {
       // A number
       const number = decodeNumber(stream) as number;
-      const field = this.fieldMapping[number];
-      if (!field) {
-        // Check if the field was removed, in which case we want to return
+      const variant = this.variantMapping[number];
+      if (!variant) {
+        // Check if the variant was removed, in which case we want to return
         // UNKNOWN, or is unrecognized.
-        if (!stream.keepUnrecognizedFields || this.removedNumbers.has(number)) {
+        if (!stream.keepUnrecognizedValues || this.removedNumbers.has(number)) {
           return this.defaultValue;
         } else {
           const { offset } = stream;
@@ -2437,20 +2470,20 @@ class EnumSerializerImpl<T = unknown>
           );
         }
       }
-      if (field.serializer) {
-        throw new Error(`refers to a wrapper field: ${number}`);
+      if (variant.serializer) {
+        throw new Error(`refers to a wrapper variant: ${number}`);
       }
-      return field.constant;
+      return variant.constant;
     } else {
       ++stream.offset;
       const number =
         wire === 248 ? (decodeNumber(stream) as number) : wire - 250;
-      const field = this.fieldMapping[number];
-      if (!field) {
+      const variant = this.variantMapping[number];
+      if (!variant) {
         decodeUnused(stream);
-        // Check if the field was removed, in which case we want to return
+        // Check if the variant was removed, in which case we want to return
         // UNKNOWN, or is unrecognized.
-        if (!stream.keepUnrecognizedFields || this.removedNumbers.has(number)) {
+        if (!stream.keepUnrecognizedValues || this.removedNumbers.has(number)) {
           return this.defaultValue;
         } else {
           const { offset } = stream;
@@ -2460,11 +2493,11 @@ class EnumSerializerImpl<T = unknown>
           );
         }
       }
-      const { serializer } = field;
+      const { serializer } = variant;
       if (!serializer) {
-        throw new Error(`refers to a constant field: ${number}`);
+        throw new Error(`refers to a constant variant: ${number}`);
       }
-      return field.wrap(serializer.decode(stream));
+      return variant.wrap(serializer.decode(stream));
     }
   }
 
@@ -2480,22 +2513,24 @@ class EnumSerializerImpl<T = unknown>
     return (input as Kinded).kind === "?" && !(input as AnyRecord)["^"];
   }
 
-  getField<K extends string | number>(key: K): EnumFieldResult<T, K> {
-    return this.fieldMapping[key]!;
+  getVariant<K extends string | number>(key: K): EnumVariantResult<T, K> {
+    return this.variantMapping[key]!;
   }
 
-  registerFields(fields: ReadonlyArray<EnumFieldImpl<T>>): void {
+  registerFieldsOrVariants(fields: ReadonlyArray<EnumVariantImpl<T>>): void {
     for (const field of fields) {
-      this.fields.push(field);
-      this.fieldMapping[field.name] = field;
-      this.fieldMapping[field.number] = field;
+      this.variants.push(field);
+      this.variantMapping[field.name] = field;
+      this.variantMapping[field.number] = field;
     }
   }
 
-  fieldDefinitions(): FieldDefinition[] {
-    return (
-      this.fields
-        // Skip the UNKNOWN field.
+  makeRecordDefinition(recordId: string): EnumDefinition {
+    return {
+      kind: "enum",
+      id: recordId,
+      variants: this.variants
+        // Skip the UNKNOWN variant.
         .filter((f) => f.number)
         .map((f) => {
           const result = {
@@ -2504,13 +2539,13 @@ class EnumSerializerImpl<T = unknown>
           };
           const type = f?.serializer?.typeSignature;
           return type ? { ...result, type: type } : result;
-        })
-    );
+        }),
+    };
   }
 
   dependencies(): InternalSerializer[] {
     const result: InternalSerializer[] = [];
-    for (const f of this.fields) {
+    for (const f of this.variants) {
       if (f.serializer) {
         result.push(f.serializer);
       }
@@ -2673,13 +2708,13 @@ function toStringImpl<T>(value: T): string {
 }
 
 // =============================================================================
-// Soia services
+// Skir services
 // =============================================================================
 
 /** Metadata of an HTTP request sent by a service client. */
 export type RequestMeta = Omit<RequestInit, "body" | "method">;
 
-/** Sends RPCs to a soia service. */
+/** Sends RPCs to a skir service. */
 export class ServiceClient {
   constructor(
     private readonly serviceUrl: string,
@@ -2719,7 +2754,7 @@ export class ServiceClient {
       const jsonCode = await responseData.text();
       return method.responseSerializer.fromJsonCode(
         jsonCode,
-        "keep-unrecognized-fields",
+        "keep-unrecognized-values",
       );
     } else {
       let message = "";
@@ -2794,7 +2829,7 @@ const RESTUDIO_HTML = `<!DOCTYPE html>
 `;
 
 /**
- * Implementation of a soia service.
+ * Implementation of a skir service.
  *
  * Usage: call `.addMethod()` to register methods, then install the service on
  * an HTTP server either by:
@@ -2838,14 +2873,14 @@ export class Service<
    * request's body. The query string is the part of the URL after '?', and it
    * can be decoded with DecodeURIComponent.
    *
-   * Pass in "keep-unrecognized-fields" if the request cannot come from a
+   * Pass in "keep-unrecognized-values" if the request cannot come from a
    * malicious user.
    */
   async handleRequest(
     reqBody: string,
     reqMeta: RequestMeta,
     resMeta: ResponseMeta,
-    keepUnrecognizedFields?: "keep-unrecognized-fields",
+    keepUnrecognizedValues?: "keep-unrecognized-values",
   ): Promise<RawResponse> {
     if (reqBody === "" || reqBody === "list") {
       const json = {
@@ -2855,6 +2890,7 @@ export class Service<
           request: methodImpl.method.requestSerializer.typeDescriptor.asJson(),
           response:
             methodImpl.method.responseSerializer.typeDescriptor.asJson(),
+          doc: methodImpl.method.doc,
         })),
       };
       const jsonCode = JSON.stringify(json, undefined, "  ");
@@ -2967,12 +3003,12 @@ export class Service<
       if (requestData[0] == "json") {
         req = methodImpl.method.requestSerializer.fromJson(
           requestData[1],
-          keepUnrecognizedFields,
+          keepUnrecognizedValues,
         );
       } else {
         req = methodImpl.method.requestSerializer.fromJsonCode(
           requestData[1],
-          keepUnrecognizedFields,
+          keepUnrecognizedValues,
         );
       }
     } catch (e) {
@@ -3023,7 +3059,7 @@ export function installServiceOnExpressApp(
   service: Service<ExpressRequest, ExpressResponse>,
   text: typeof ExpressText,
   json: typeof ExpressJson,
-  keepUnrecognizedFields?: "keep-unrecognized-fields",
+  keepUnrecognizedValues?: "keep-unrecognized-values",
 ): void {
   const callback = async (
     req: ExpressRequest,
@@ -3046,7 +3082,7 @@ export function installServiceOnExpressApp(
       body,
       req,
       res,
-      keepUnrecognizedFields,
+      keepUnrecognizedValues,
     );
     res
       .status(rawResponse.statusCode)
@@ -3128,7 +3164,7 @@ type TypeSpec =
       primitive: keyof PrimitiveTypes;
     };
 
-// The UNKNOWN field is common to all enums.
+// The UNKNOWN variant is common to all enums.
 const UNKNOWN_FIELD_SPEC: EnumFieldSpec = {
   name: "?",
   number: 0,
@@ -3181,7 +3217,7 @@ export function _initModuleClasses(
       }
       case "enum": {
         // Create the constants.
-        // Prepend the UNKNOWN field to the array of fields specified from the
+        // Prepend the UNKNOWN variant to the array of fields specified from the
         // generated code.
         record.fields = [UNKNOWN_FIELD_SPEC].concat(record.fields);
         for (const field of record.fields) {
@@ -3264,7 +3300,7 @@ export function _initModuleClasses(
         const serializer = clazz.serializer as EnumSerializerImpl;
         const fields = record.fields.map((f) =>
           f.type
-            ? new EnumWrapperFieldImpl(
+            ? new EnumWrapperVariantImpl(
                 f.name,
                 f.number,
                 getSerializerForType(f.type) as InternalSerializer,
