@@ -1226,6 +1226,7 @@ export function parseTypeDescriptorFromJson(json: Json): TypeDescriptor {
     const name = nameParts[nameParts.length - 1]!;
     const parentId = module + ":" + nameParts.slice(0, -1).join(".");
     const parentType = recordBundles[parentId]?.serializer;
+    const doc = definition.doc ?? "";
     switch (definition.kind) {
       case "struct": {
         const fields: StructFieldImpl[] = [];
@@ -1244,7 +1245,7 @@ export function parseTypeDescriptorFromJson(json: Json): TypeDescriptor {
         }
         const s = serializer as StructSerializerImpl<Json>;
         initOps.push(() =>
-          s.init(name, module, parentType, fields, removed_numbers ?? []),
+          s.init(name, module, parentType, doc, fields, removed_numbers ?? []),
         );
         break;
       }
@@ -1269,7 +1270,14 @@ export function parseTypeDescriptorFromJson(json: Json): TypeDescriptor {
                 } as EnumConstantVariant<Json>),
           );
         initOps.push(() =>
-          s.init(name, module, parentType, variants, removed_numbers ?? []),
+          s.init(
+            name,
+            module,
+            parentType,
+            doc,
+            variants,
+            removed_numbers ?? [],
+          ),
         );
         break;
       }
@@ -1953,6 +1961,7 @@ abstract class AbstractRecordSerializer<T, F> extends AbstractSerializer<T> {
   name = "";
   modulePath = "";
   parentType: StructDescriptor | EnumDescriptor | undefined;
+  doc = "";
   removedNumbers = new Set<number>();
   initialized?: true;
 
@@ -1960,12 +1969,14 @@ abstract class AbstractRecordSerializer<T, F> extends AbstractSerializer<T> {
     name: string,
     modulePath: string,
     parentType: StructDescriptor | EnumDescriptor | undefined,
+    doc: string,
     fieldsOrVariants: readonly F[],
     removedNumbers: readonly number[],
   ): void {
     this.name = name;
     this.modulePath = modulePath;
     this.parentType = parentType;
+    this.doc = doc;
     this.removedNumbers = new Set(removedNumbers);
     this.registerFieldsOrVariants(fieldsOrVariants);
     this.initialized = true;
@@ -1985,6 +1996,9 @@ abstract class AbstractRecordSerializer<T, F> extends AbstractSerializer<T> {
       return;
     }
     const recordDefinition = this.makeRecordDefinition(recordId);
+    if (this.doc) {
+      recordDefinition.doc = this.doc;
+    }
     if (this.removedNumbers.size) {
       recordDefinition.removed_numbers = [...this.removedNumbers];
     }
@@ -3129,6 +3143,7 @@ interface StructSpec {
   initFn: (target: unknown, initializer: unknown) => void;
   name: string;
   parentCtor?: { new (): unknown };
+  doc?: string;
   fields: readonly StructFieldSpec[];
   removedNumbers?: readonly number[];
 }
@@ -3162,6 +3177,7 @@ interface EnumSpec<Enum = unknown> {
   createValueFn?: (initializer: unknown) => unknown;
   name: string;
   parentCtor?: { new (): unknown };
+  doc?: string;
   variants: EnumVariantSpec[];
   removedNumbers?: readonly number[];
 }
@@ -3295,6 +3311,7 @@ export function _initModuleClasses(
           record.name,
           modulePath,
           parentTypeDescriptor,
+          record.doc ?? "",
           fields,
           record.removedNumbers ?? [],
         );
@@ -3347,6 +3364,7 @@ export function _initModuleClasses(
           record.name,
           modulePath,
           parentTypeDescriptor,
+          record.doc ?? "",
           variants,
           record.removedNumbers ?? [],
         );
