@@ -298,15 +298,15 @@ export interface BinaryForm {
  * compact representation than when using JSON objects, and this makes
  * serialization and deserialization a bit faster. Because field names are left
  * out of the JSON, it is a representation which allows persistence: you can
- * safely rename a field in a `.skir` file without breaking backwards
+ * safely rename a field in a '.skir' file without breaking backwards
  * compatibility.
  * One con of this representation is that it is harder to tell, just by looking
  * at the JSON, what field of the struct each value in the array corresponds to.
  *
  * When using the readable flavor, structs are converted to JSON objects. The
- * name of each field in the `.skir` file is used as-is in the JSON. This
+ * name of each field in the '.skir' file is used as-is in the JSON. This
  * results in a representation which is much more readable by humans, but also
- * not suited for persistence: when you rename a field in a `.skir` file, you
+ * not suited for persistence: when you rename a field in a '.skir' file, you
  * will no lonnger be able to deserialize old JSONs.
  *
  * @example
@@ -514,7 +514,7 @@ export interface PrimitiveTypes {
 }
 
 /**
- * Describes an optional type. In a `.skir` file, an optional type is
+ * Describes an optional type. In a '.skir' file, an optional type is
  * represented with a question mark at the end of another type.
  */
 export interface OptionalDescriptor<T> extends TypeDescriptorBase {
@@ -539,7 +539,7 @@ export interface ArrayDescriptor<T> extends TypeDescriptorBase {
  */
 export interface StructDescriptor<T = unknown> extends TypeDescriptorBase {
   readonly kind: "struct";
-  /** Name of the struct as specified in the `.skir` file. */
+  /** Name of the struct as specified in the '.skir' file. */
   readonly name: string;
   /**
    * A string containing all the names in the hierarchic sequence above and
@@ -558,7 +558,7 @@ export interface StructDescriptor<T = unknown> extends TypeDescriptorBase {
    * Undefined if the struct is defined at the top-level of the module.
    */
   readonly parentType: StructDescriptor | EnumDescriptor | undefined;
-  /** The fields of the struct in the order they appear in the `.skir` file. */
+  /** The fields of the struct in the order they appear in the '.skir' file. */
   readonly fields: ReadonlyArray<StructField<T>>;
   /** The field numbers marked as removed. */
   readonly removedNumbers: ReadonlySet<number>;
@@ -583,7 +583,7 @@ export interface StructDescriptor<T = unknown> extends TypeDescriptorBase {
 
 /** Field of a Skir struct. */
 export interface StructField<Struct = unknown, Value = unknown> {
-  /** Field name as specified in the `.skir` file, e.g. "user_id". */
+  /** Field name as specified in the '.skir' file, e.g. "user_id". */
   readonly name: string;
   /** Name of the property in the generated class, e.g. "userId". */
   readonly property: string;
@@ -591,6 +591,11 @@ export interface StructField<Struct = unknown, Value = unknown> {
   readonly number: number;
   /** Describes the field type. */
   readonly type: TypeDescriptor<Value>;
+  /**
+   * Documentation for this struct field, specified as doc comments in the
+   * '.skir' file. May be empty.
+   */
+  doc: string;
 
   /** Extracts the value of the field from the given struct. */
   get(struct: Struct | MutableForm<Struct>): Value;
@@ -623,7 +628,7 @@ export type StructFieldResult<Struct, Key extends string | number> =
 /** Describes a Skir enum. */
 export interface EnumDescriptor<T = unknown> extends TypeDescriptorBase {
   readonly kind: "enum";
-  /** Name of the enum as specified in the `.skir` file. */
+  /** Name of the enum as specified in the '.skir' file. */
   readonly name: string;
   /**
    * A string containing all the names in the hierarchic sequence above and
@@ -644,7 +649,7 @@ export interface EnumDescriptor<T = unknown> extends TypeDescriptorBase {
   readonly parentType: StructDescriptor | EnumDescriptor | undefined;
   /**
    * Includes the UNKNOWN variant, followed by the other variants in the order
-   * they appear in the `.skir` file.
+   * they appear in the '.skir' file.
    */
   readonly variants: ReadonlyArray<EnumVariant<T>>;
   /** The variant numbers marked as removed. */
@@ -671,34 +676,44 @@ export type EnumVariant<Enum = unknown> =
   | EnumConstantVariant<Enum>
   | EnumWrapperVariant<Enum, unknown>;
 
-/** Field of a Skir enum which does not hold any value. */
+/** Constant variant of a Skir enum. */
 export interface EnumConstantVariant<Enum = unknown> {
   /**
-   * Variant name as specified in the `.skir` file, e.g. "MONDAY".
+   * Variant name as specified in the '.skir' file, e.g. "MONDAY".
    * Always in UPPER_CASE format.
    */
   readonly name: string;
   /** Variant number. */
   readonly number: number;
-  /** The instance of the generated class which corresponds to this field. */
+  /** The instance of the generated class which corresponds to this variant. */
   readonly constant: Enum;
   /** Always undefined, unlike the `type` field of `EnumWrapperVariant`. */
   readonly type?: undefined;
+  /**
+   * Documentation for this enum variant, specified as doc comments in the
+   * '.skir' file. May be empty.
+   */
+  readonly doc: string;
 }
 
-/** Variant of a Skir enum which holds a value of a given type. */
+/** Wrapper variant of a Skir enum. */
 export interface EnumWrapperVariant<Enum = unknown, Value = unknown> {
   /**
-   * Variant name as specified in the `.skir` file, e.g. "v4".
+   * Variant name as specified in the '.skir' file, e.g. "v4".
    * Always in lower_case format.
    */
   readonly name: string;
   /** Variant number. */
   readonly number: number;
-  /** Describes the type of the value held by the field. */
+  /** Describes the type of the value held by the variant. */
   readonly type: TypeDescriptor<Value>;
   /** Always undefined, unlike the `type` field of `EnumConstantVariant`. */
   readonly constant?: undefined;
+  /**
+   * Documentation for this enum variant, specified as doc comments in the
+   * '.skir' file. May be empty.
+   */
+  readonly doc: string;
 
   /**
    * Extracts the value held by the given enum instance if it matches this
@@ -739,11 +754,11 @@ export type EnumVariantResult<Enum, Key extends string | number> =
  * server side.
  */
 export interface Method<Request, Response> {
-  /** Name of the procedure as specified in the `.skir` file. */
+  /** Name of the procedure as specified in the '.skir' file. */
   name: string;
   /**
    * A number which uniquely identifies this procedure.
-   * When it is not specified in the `.skir` file, it is obtained by hashing the
+   * When it is not specified in the '.skir' file, it is obtained by hashing the
    * procedure name.
    */
   number: number;
@@ -752,8 +767,8 @@ export interface Method<Request, Response> {
   /** Serializer of response objects. */
   responseSerializer: Serializer<Response>;
   /**
-   * Documentation for this procedure specified as doc comments in the `.skir`
-   * file.
+   * Documentation for this procedure, specified as doc comments in the '.skir'
+   * file. May be empty.
    */
   doc: string;
 }
@@ -1217,7 +1232,13 @@ export function parseTypeDescriptorFromJson(json: Json): TypeDescriptor {
         for (const f of definition.fields) {
           const fieldSerializer = parse(f.type!);
           fields.push(
-            new StructFieldImpl(f.name, f.name, f.number, fieldSerializer),
+            new StructFieldImpl(
+              f.name,
+              f.name,
+              f.number,
+              fieldSerializer,
+              f.doc ?? "",
+            ),
           );
           (defaultValue as AnyRecord)[f.name] = fieldSerializer.defaultValue;
         }
@@ -1237,12 +1258,14 @@ export function parseTypeDescriptorFromJson(json: Json): TypeDescriptor {
                   f.name,
                   f.number,
                   parse(f.type),
+                  f.doc ?? "",
                   serializer.createFn,
                 )
               : ({
                   name: f.name,
                   number: f.number,
                   constant: Object.freeze({ kind: f.name }),
+                  doc: f.doc ?? "",
                 } as EnumConstantVariant<Json>),
           );
         initOps.push(() =>
@@ -1686,6 +1709,7 @@ class StructFieldImpl<Struct = unknown, Value = unknown>
     readonly property: string,
     readonly number: number,
     readonly serializer: InternalSerializer<Value>,
+    readonly doc: string,
   ) {}
 
   get type(): TypeDescriptor<Value> {
@@ -2001,7 +2025,7 @@ class StructSerializerImpl<T = unknown>
   }
 
   readonly kind = "struct";
-  // Fields in the order they appear in the `.skir` file.
+  // Fields in the order they appear in the '.skir' file.
   readonly fields: Array<StructFieldImpl<T>> = [];
   readonly fieldMapping: { [key: string | number]: StructFieldImpl<T> } = {};
   // Fields sorted by number in descending order.
@@ -2270,6 +2294,7 @@ class StructSerializerImpl<T = unknown>
         name: f.name,
         number: f.number,
         type: f.serializer.typeSignature,
+        doc: f.doc,
       })),
     };
   }
@@ -2298,6 +2323,7 @@ class EnumWrapperVariantImpl<Enum, Value = unknown> {
     readonly name: string,
     readonly number: number,
     readonly serializer: InternalSerializer<Value>,
+    readonly doc: string,
     private createFn: (initializer: { kind: string; value: unknown }) => Enum,
   ) {}
 
@@ -2445,7 +2471,7 @@ class EnumSerializerImpl<T = unknown>
       }
       serializer.encode(value, stream);
     } else {
-      // A constant field.
+      // A constant variant.
       encodeUint32(number, stream);
     }
   }
@@ -2517,11 +2543,11 @@ class EnumSerializerImpl<T = unknown>
     return this.variantMapping[key]!;
   }
 
-  registerFieldsOrVariants(fields: ReadonlyArray<EnumVariantImpl<T>>): void {
-    for (const field of fields) {
-      this.variants.push(field);
-      this.variantMapping[field.name] = field;
-      this.variantMapping[field.number] = field;
+  registerFieldsOrVariants(variants: ReadonlyArray<EnumVariantImpl<T>>): void {
+    for (const variant of variants) {
+      this.variants.push(variant);
+      this.variantMapping[variant.name] = variant;
+      this.variantMapping[variant.number] = variant;
     }
   }
 
@@ -3112,6 +3138,7 @@ interface StructFieldSpec {
   property: string;
   number: number;
   type: TypeSpec;
+  doc?: string;
   mutableGetter?: string;
   indexable?: IndexableSpec;
 }
@@ -3135,14 +3162,15 @@ interface EnumSpec<Enum = unknown> {
   createValueFn?: (initializer: unknown) => unknown;
   name: string;
   parentCtor?: { new (): unknown };
-  fields: EnumFieldSpec[];
+  variants: EnumVariantSpec[];
   removedNumbers?: readonly number[];
 }
 
-interface EnumFieldSpec {
+interface EnumVariantSpec {
   name: string;
   number: number;
   type?: TypeSpec;
+  doc?: string;
 }
 
 type TypeSpec =
@@ -3165,7 +3193,7 @@ type TypeSpec =
     };
 
 // The UNKNOWN variant is common to all enums.
-const UNKNOWN_FIELD_SPEC: EnumFieldSpec = {
+const UNKNOWN_VARIANT_SPEC: EnumVariantSpec = {
   name: "?",
   number: 0,
 };
@@ -3217,15 +3245,15 @@ export function _initModuleClasses(
       }
       case "enum": {
         // Create the constants.
-        // Prepend the UNKNOWN variant to the array of fields specified from the
+        // Prepend the UNKNOWN variant to the array of variants specified from the
         // generated code.
-        record.fields = [UNKNOWN_FIELD_SPEC].concat(record.fields);
-        for (const field of record.fields) {
-          if (field.type) {
+        record.variants = [UNKNOWN_VARIANT_SPEC].concat(record.variants);
+        for (const variant of record.variants) {
+          if (variant.type) {
             continue;
           }
-          const property = enumConstantNameToProperty(field.name);
-          clazz[property] = new record.ctor(PRIVATE_KEY, field.name);
+          const property = enumConstantNameToProperty(variant.name);
+          clazz[property] = new record.ctor(PRIVATE_KEY, variant.name);
         }
         // Define the 'create' static factory function.
         const createFn = makeCreateEnumFunction(record);
@@ -3259,6 +3287,7 @@ export function _initModuleClasses(
               f.property,
               f.number,
               getSerializerForType(f.type) as InternalSerializer,
+              f.doc ?? "",
             ),
         );
         const serializer = clazz.serializer as StructSerializerImpl;
@@ -3298,25 +3327,27 @@ export function _initModuleClasses(
       }
       case "enum": {
         const serializer = clazz.serializer as EnumSerializerImpl;
-        const fields = record.fields.map((f) =>
+        const variants = record.variants.map((f) =>
           f.type
             ? new EnumWrapperVariantImpl(
                 f.name,
                 f.number,
                 getSerializerForType(f.type) as InternalSerializer,
+                f.doc ?? "",
                 serializer.createFn,
               )
             : {
                 name: f.name,
                 number: f.number,
                 constant: clazz[enumConstantNameToProperty(f.name)],
+                doc: f.doc ?? "",
               },
         );
         serializer.init(
           record.name,
           modulePath,
           parentTypeDescriptor,
-          fields,
+          variants,
           record.removedNumbers ?? [],
         );
         // Freeze the enum class.
@@ -3360,7 +3391,7 @@ function makeCreateEnumFunction(
     }
     const value = createValue(initializer);
     if (value === undefined) {
-      throw new Error(`Wrapper field not found: ${kind}`);
+      throw new Error(`Wrapper variant not found: ${kind}`);
     }
     return new ctor(privateKey, kind, value);
   };
