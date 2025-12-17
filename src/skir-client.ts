@@ -2308,7 +2308,7 @@ class StructSerializerImpl<T = unknown>
         name: f.name,
         number: f.number,
         type: f.serializer.typeSignature,
-        doc: f.doc,
+        doc: f.doc ? f.doc : undefined,
       })),
     };
   }
@@ -2576,6 +2576,7 @@ class EnumSerializerImpl<T = unknown>
           const result = {
             name: f.name,
             number: f.number,
+            doc: f.doc ? f.doc : undefined,
           };
           const type = f?.serializer?.typeSignature;
           return type ? { ...result, type: type } : result;
