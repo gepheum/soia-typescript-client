@@ -2304,6 +2304,7 @@ class StructSerializerImpl<T = unknown>
     return {
       kind: "struct",
       id: recordId,
+      doc: undefined,
       fields: this.fields.map((f) => ({
         name: f.name,
         number: f.number,
@@ -2569,6 +2570,7 @@ class EnumSerializerImpl<T = unknown>
     return {
       kind: "enum",
       id: recordId,
+      doc: undefined,
       variants: this.variants
         // Skip the UNKNOWN variant.
         .filter((f) => f.number)
