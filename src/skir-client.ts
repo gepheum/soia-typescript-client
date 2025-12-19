@@ -2717,13 +2717,13 @@ export abstract class _EnumBase {
   protected constructor(
     privateKey: symbol,
     readonly kind: string,
-    value: unknown,
+    value?: unknown,
     unrecognized?: UnrecognizedEnum,
   ) {
     if (privateKey !== PRIVATE_KEY) {
       throw forPrivateUseError(this);
     }
-    (this as AnyRecord).value = value;
+    (this as AnyRecord)["^"] = unrecognized;
     if (unrecognized) {
       if (!(unrecognized instanceof UnrecognizedEnum)) {
         throw new TypeError();
