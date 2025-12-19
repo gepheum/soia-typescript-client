@@ -2717,7 +2717,7 @@ export abstract class _EnumBase {
   protected constructor(
     privateKey: symbol,
     readonly kind: string,
-    value?: unknown,
+    readonly value?: unknown,
     unrecognized?: UnrecognizedEnum,
   ) {
     if (privateKey !== PRIVATE_KEY) {
