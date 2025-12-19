@@ -744,7 +744,7 @@ export interface EnumWrapperVariant<Enum = unknown, Value = unknown> {
 export type EnumVariantResult<Enum, Key extends string | number> =
   | EnumVariant<Enum>
   | (Enum extends _EnumBase
-      ? Key extends Enum["kind"]
+      ? Key extends Enum["union"]["kind"]
         ? never
         : undefined
       : undefined);
@@ -2349,7 +2349,7 @@ class EnumWrapperVariantImpl<Enum, Value = unknown> {
   readonly constant?: undefined;
 
   get(e: Enum): Value | undefined {
-    return (e as _EnumBase).kind === this.name
+    return (e as AnyRecord).kind === this.name
       ? ((e as AnyRecord).value as Value)
       : undefined;
   }
@@ -2716,13 +2716,14 @@ export abstract class _FrozenBase {
 export abstract class _EnumBase {
   protected constructor(
     privateKey: symbol,
-    readonly kind: string,
+    kind: string,
     value: unknown,
     unrecognized?: UnrecognizedEnum,
   ) {
     if (privateKey !== PRIVATE_KEY) {
       throw forPrivateUseError(this);
     }
+    (this as AnyRecord).kind = kind;
     (this as AnyRecord).value = value;
     if (unrecognized) {
       if (!(unrecognized instanceof UnrecognizedEnum)) {
@@ -2732,6 +2733,11 @@ export abstract class _EnumBase {
     }
     Object.freeze(this);
   }
+
+  declare readonly union: {
+    kind: unknown;
+    value: unknown;
+  };
 
   toString(): string {
     return toStringImpl(this);
