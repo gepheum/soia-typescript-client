@@ -7,7 +7,7 @@ Library imported from TypeScript code generated from skir files.
 
 Install with:
 ```shell
-npm i skir
+npm i skir-client
 ```
 
 See:

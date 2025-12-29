@@ -2961,7 +2961,7 @@ export class Service<
       let reqBodyJson: Json;
       try {
         reqBodyJson = JSON.parse(reqBody);
-      } catch (e) {
+      } catch (_e) {
         return new RawResponse("bad request: invalid JSON", "bad-request");
       }
       const methodField = (reqBodyJson as AnyRecord)["method"];
