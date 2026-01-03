@@ -575,14 +575,14 @@ describe("int64 serializer", () => {
   });
 });
 
-describe("uint64 serializer", () => {
-  const serializer = skir.primitiveSerializer("uint64");
+describe("hash64 serializer", () => {
+  const serializer = skir.primitiveSerializer("hash64");
   const tester = new SerializerTester(serializer);
 
   it("#typeDescriptor", () => {
     expect(serializer.typeDescriptor).toMatch({
       kind: "primitive",
-      primitive: "uint64",
+      primitive: "hash64",
     });
   });
 
@@ -590,7 +590,7 @@ describe("uint64 serializer", () => {
     expect(serializer.typeDescriptor.asJson()).toMatch({
       type: {
         kind: "primitive",
-        value: "uint64",
+        value: "hash64",
       },
       records: [],
     });

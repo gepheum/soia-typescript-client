@@ -505,7 +505,7 @@ export interface PrimitiveTypes {
   bool: boolean;
   int32: number;
   int64: bigint;
-  uint64: bigint;
+  hash64: bigint;
   float32: number;
   float64: number;
   timestamp: Timestamp;
@@ -938,7 +938,7 @@ class OutputStream implements BinaryForm {
     dataView.setInt32((this.offset += 4) - 4, value, true);
   }
 
-  writeUint64(value: bigint): void {
+  writeHash64(value: bigint): void {
     const dataView = this.reserve(8);
     dataView.setBigUint64((this.offset += 8) - 8, value, true);
   }
@@ -1438,7 +1438,7 @@ class Float64Serializer extends FloatSerializer<"float64"> {
 }
 
 abstract class AbstractBigIntSerializer<
-  P extends "int64" | "uint64",
+  P extends "int64" | "hash64",
 > extends AbstractPrimitiveSerializer<P> {
   readonly defaultValue = BigInt(0);
 
@@ -1499,17 +1499,17 @@ class Int64Serializer extends AbstractBigIntSerializer<"int64"> {
   }
 }
 
-const MAX_UINT64 = BigInt("18446744073709551615");
+const MAX_HASH64 = BigInt("18446744073709551615");
 
-class Uint64Serializer extends AbstractBigIntSerializer<"uint64"> {
-  readonly primitive = "uint64";
+class Hash64Serializer extends AbstractBigIntSerializer<"hash64"> {
+  readonly primitive = "hash64";
 
   toJson(input: bigint): number | string {
     if (input <= 9007199254740991) {
       return input <= 0 ? 0 : Number(input);
     }
     input = BigInt(input);
-    return MAX_UINT64 < input ? MAX_UINT64.toString() : input.toString();
+    return MAX_HASH64 < input ? MAX_HASH64.toString() : input.toString();
   }
 
   encode(input: bigint, stream: OutputStream): void {
@@ -1525,7 +1525,7 @@ class Uint64Serializer extends AbstractBigIntSerializer<"uint64"> {
       }
     } else {
       stream.writeUint8(234);
-      stream.writeUint64(input <= MAX_UINT64 ? input : MAX_UINT64);
+      stream.writeHash64(input <= MAX_HASH64 ? input : MAX_HASH64);
     }
   }
 
@@ -1884,7 +1884,7 @@ const primitiveSerializers: {
   bool: new BoolSerializer(),
   int32: int32_Serializer,
   int64: new Int64Serializer(),
-  uint64: new Uint64Serializer(),
+  hash64: new Hash64Serializer(),
   float32: new Float32Serializer(),
   float64: new Float64Serializer(),
   timestamp: new TimestampSerializer(),
@@ -1911,9 +1911,9 @@ function decodeUnused(stream: InputStream): void {
     case 8: // float32
       stream.offset += 4;
       break;
-    case 2: // uint64
+    case 2: // hash64
     case 6: // int64
-    case 7: // uint64 timestamp
+    case 7: // hash64 timestamp
     case 9: // float64
       stream.offset += 8;
       break;
